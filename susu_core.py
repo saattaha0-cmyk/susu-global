@@ -1,26 +1,16 @@
 import streamlit as st
 import requests
 
-# ... (API bağlantı ayarların aynı kalıyor) ...
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
 
-def get_pools():
-    url = f"{SUPABASE_URL}/rest/v1/pools"
-    res = requests.get(url, headers=HEADERS)
-    return res.json()
+st.title("Susu Global")
 
-if "onboarding_step" not in st.session_state: st.session_state.onboarding_step = 1
+# Havuzları çek
+res = requests.get(f"{SUPABASE_URL}/rest/v1/pools", headers=HEADERS)
+pools = res.json()
 
-# --- HAVUZ GİRİŞ EKRANI ---
-if st.session_state.onboarding_step == 3:
-    st.subheader("Aktif Tasarruf Havuzları")
-    pools = get_pools()
-    
-    for pool in pools:
-        st.write(f"**{pool['pool_name']}**")
-        st.write(f"Aylık Katılım: {pool['monthly_amount']} TL")
-        if st.button(f"Bu Havuza Katıl ({pool['pool_name']})"):
-            # Havuz bağlantısını Ledger'a yazıyoruz
-            db_save_ledger(st.session_state.db_user_id, "HAVUZA_KATILIM", pool['monthly_amount'], "JOIN_POOL_TX")
-            st.success("Tebrikler! Havuza başarıyla katıldınız.")
-            st.session_state.onboarding_step = 4
-            st.rerun()
+st.subheader("Aktif Havuzlar")
+for pool in pools:
+    st.write(f"Havuz: {pool['pool_name']} - {pool['monthly_amount']} TL")
