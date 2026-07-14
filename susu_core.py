@@ -171,14 +171,20 @@ if not global_state:
 pools_dict = global_state["pools"]
 
 # ==========================================
-# WEB PORTAL ARAYÜZÜ
+# WEB PORTAL ARAYÜZÜ (STREAMLIT ENGINE)
 # ==========================================
 
 # Sol Menü Tasarımı
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=70)
     st.title("Susu Core Engine")
-    st.caption("🔒 Banking API Core v6.0 Active")
+    st.caption("🔑 Role-Based Access Control Active")
+    st.write("---")
+    
+    # 👑 ROL SEÇİM PANELİ (YATIRIMCI DEMO MODU)
+    st.subheader("👤 Demo User Role")
+    user_role = st.radio("Choose perspective for demo:", ["Admin / Platform Owner", "Pool Participant"], horizontal=True)
+    
     st.write("---")
     
     # 📁 HAVUZ SEÇİM PANELİ
@@ -195,63 +201,66 @@ with st.sidebar:
     lang = get_locale(active_pool.currency)
     st.write("---")
     
-    # 🆕 YENİ HAVUZ OLUŞTURMA
-    st.subheader("🆕 Deploy New Pool")
-    with st.expander("Configure Parameters", expanded=False):
-        new_id = st.text_input("Unique Pool ID", placeholder="e.g., London-Club").strip()
-        new_name = st.text_input("Display Name", placeholder="e.g., London Premium")
-        new_curr = st.selectbox("Currency", ["TRY", "USD", "EUR", "GBP"])
-        new_contrib = st.number_input("Monthly Contribution", min_value=10, value=5000, step=100)
-        new_duration = st.slider("Total Months / Members", 3, 12, 4)
-        create_btn = st.button("🚀 Deploy to Cloud", use_container_width=True)
-        
-        if create_btn and new_id and new_name:
-            prefix = "🪙" if new_curr == "TRY" else "🌐"
-            pools_dict[new_id] = {"pool_id": new_id, "pool_name": f"{prefix} {new_name} ({new_curr})", "currency": new_curr, "monthly_contribution": new_contrib, "total_months": new_duration, "current_month": 1, "users": [], "history": []}
-            global_state["pools"] = pools_dict
-            if save_global_state_to_db(global_state):
-                st.success("Deployed successfully!")
-                st.rerun()
-
-    st.write("---")
-    
-    # 👥 ÜYE EKLEME (KYC)
-    st.subheader(lang["onboard_title"])
-    with st.form("onboard_form", clear_on_submit=True):
-        name = st.text_input("Full Name")
-        country = st.selectbox("Country", ["Turkey", "United States", "United Kingdom", "Germany", "Nigeria", "Mexico"])
-        passport = st.text_input("Passport Number")
-        score = st.slider("Credit Score", 300, 850, 720)
-        submit = st.form_submit_button(lang["btn_add"])
-        
-        if submit and name:
-            if len(active_pool.users) >= active_pool.total_months:
-                st.error("Pool is full!")
-            else:
-                user_id = len(active_pool.users) + 1
-                pass_ok = True if (passport and len(passport) >= 6) else False
-                new_user = SusuUser(user_id, name, country, pass_ok, score)
-                active_pool.users.append(new_user)
-                pools_dict[selected_pool_id] = active_pool.to_dict()
+    # SADECE ADMIN YENİ HAVUZ DEPLOY EDEBİLİR
+    if user_role == "Admin / Platform Owner":
+        st.subheader("🆕 Deploy New Pool (Admin Only)")
+        with st.expander("Configure Parameters", expanded=False):
+            new_id = st.text_input("Unique Pool ID", placeholder="e.g., Izmir-Ege").strip()
+            new_name = st.text_input("Display Name", placeholder="e.g., Ege Finans Grubu")
+            new_curr = st.selectbox("Currency", ["TRY", "USD", "EUR", "GBP"])
+            new_contrib = st.number_input("Monthly Contribution", min_value=10, value=20000, step=100)
+            new_duration = st.slider("Total Months / Members", 3, 12, 4)
+            create_btn = st.button("🚀 Deploy to Cloud", use_container_width=True)
+            
+            if create_btn and new_id and new_name:
+                prefix = "🪙" if new_curr == "TRY" else "🌐"
+                pools_dict[new_id] = {"pool_id": new_id, "pool_name": f"{prefix} {new_name} ({new_curr})", "currency": new_curr, "monthly_contribution": new_contrib, "total_months": new_duration, "current_month": 1, "users": [], "history": []}
                 global_state["pools"] = pools_dict
                 if save_global_state_to_db(global_state):
-                    st.success("Onboarded!")
+                    st.success("Deployed successfully!")
                     st.rerun()
 
-    st.write("---")
-    if st.button("🚨 Factory Reset Database", use_container_width=True):
-        default_state = {
-            "pools": {
-                "Alpha-USD": {"pool_id": "Alpha-USD", "pool_name": "🌐 Global USD Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []},
-                "Finansal-Ozgurluk": {"pool_id": "Finansal-Ozgurluk", "pool_name": "🪙 Finansal Özgürlük Grubu", "currency": "TRY", "monthly_contribution": 20000, "total_months": 4, "current_month": 1, "users": [], "history": []}
+        st.write("---")
+        
+        # SADECE ADMIN KATILIMCI EKLEYEBİLİR (KYC)
+        st.subheader(lang["onboard_title"])
+        with st.form("onboard_form", clear_on_submit=True):
+            name = st.text_input("Full Name")
+            country = st.selectbox("Country", ["Turkey", "United States", "United Kingdom", "Germany", "Nigeria", "Mexico"])
+            passport = st.text_input("Passport Number")
+            score = st.slider("Credit Score", 300, 850, 720)
+            submit = st.form_submit_button(lang["btn_add"])
+            
+            if submit and name:
+                if len(active_pool.users) >= active_pool.total_months:
+                    st.error("Pool is full!")
+                else:
+                    user_id = len(active_pool.users) + 1
+                    pass_ok = True if (passport and len(passport) >= 6) else False
+                    new_user = SusuUser(user_id, name, country, pass_ok, score)
+                    active_pool.users.append(new_user)
+                    pools_dict[selected_pool_id] = active_pool.to_dict()
+                    global_state["pools"] = pools_dict
+                    if save_global_state_to_db(global_state):
+                        st.success("Onboarded!")
+                        st.rerun()
+
+        st.write("---")
+        if st.button("🚨 Factory Reset Database", use_container_width=True):
+            default_state = {
+                "pools": {
+                    "Alpha-USD": {"pool_id": "Alpha-USD", "pool_name": "🌐 Global USD Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []},
+                    "Finansal-Ozgurluk": {"pool_id": "Finansal-Ozgurluk", "pool_name": "🪙 Finansal Özgürlük Grubu", "currency": "TRY", "monthly_contribution": 20000, "total_months": 4, "current_month": 1, "users": [], "history": []}
+                }
             }
-        }
-        if save_global_state_to_db(default_state):
-            st.success("Database fully reset!")
-            st.rerun()
+            if save_global_state_to_db(default_state):
+                st.success("Database fully reset!")
+                st.rerun()
+    else:
+        st.info("ℹ️ You are in **Participant Mode**. New pool deployment, factory resets, and KYC onboarding are restricted to Admin role.")
 
 # ==========================================
-# ANA PANEL RE-DESIGN (INVESTOR VIEW)
+# ANA PANEL (INVESTOR VIEW)
 # ==========================================
 st.title(lang["app_title"])
 st.write(lang["sub_title"])
@@ -269,7 +278,7 @@ with col4: st.metric(label=lang["metrics_phase"], value=lang["phase_text"].forma
 
 st.write("---")
 
-# YATIRIMCIYA ÖZEL GÖRSEL ANALİTİK PANELİ
+# GÖRSEL ANALİTİK PANELİ
 if active_pool.history:
     st.subheader("📊 FinTech Growth & Escrow Analytics (Investor Data Visuals)")
     chart_data = pd.DataFrame([{
@@ -293,56 +302,112 @@ left, right = st.columns([2, 1])
 with left:
     st.subheader(lang["participants_title"])
     if not active_pool.users:
-        st.info("No active users in this cloud room yet.")
+        st.info("No active users in this cloud room yet. Use the Admin panel on the left to add members.")
     else:
         user_list = []
         for u in active_pool.users:
             kyc_status = lang["kyc_verified"] if u.passport_verified else lang["kyc_failed"]
             payout_status = lang["status_received"] if u.has_received else lang["status_waiting"]
-            user_list.append({"Sıra/ID": u.user_id, "Katılımcı": u.name, "Bölge": u.country, "KYC Altyapısı": kyc_status, "Risk Skoru": u.credit_score, "Akıllı Durum": payout_status})
+            payment_indicator = "🟢 PAID" if u.has_paid else "🔴 UNPAID (PENDING)"
+            user_list.append({
+                "Sıra/ID": u.user_id, "Katılımcı": u.name, "Bölge": u.country,
+                "KYC Altyapısı": kyc_status, "Risk Skoru": u.credit_score,
+                "Aylık Ödeme": payment_indicator, "Akıllı Durum": payout_status
+            })
         st.dataframe(pd.DataFrame(user_list), use_container_width=True, hide_index=True)
         
-        # Akıllı Havuz Tetikleme Butonu
+        # ==========================================
+        # 💸 INTERACTIVE PAYMENT TERMINAL (DEMO MODE)
+        # ==========================================
         st.write("")
+        st.subheader("💸 Interactive Escrow Payment Gateway")
+        st.write("In a live app, participants pay via open banking or cards. Click below to simulate instant deposit or credit coverage:")
+        
+        # Her katılımcı için ödeme yapma butonlarını grid halinde sunalım
+        payment_cols = st.columns(len(active_pool.users))
+        for idx, u in enumerate(active_pool.users):
+            with payment_cols[idx]:
+                if u.has_paid:
+                    st.success(f"✓ {u.name} paid")
+                else:
+                    # Risk Temerrüt Simülasyonu (Eğer kredi skoru çok düşükse ödemede zorlanıyor gösterelim)
+                    if u.credit_score < 500:
+                        st.warning(f"⚠️ {u.name} (Risk)")
+                        if st.button(f"Cover with BaaS Insurance", key=f"ins_{u.user_id}", use_container_width=True):
+                            u.has_paid = True
+                            pools_dict[selected_pool_id] = active_pool.to_dict()
+                            global_state["pools"] = pools_dict
+                            if save_global_state_to_db(global_state):
+                                st.toast(f"BaaS Default Insurance successfully covered {u.name}'s share!")
+                                st.rerun()
+                    else:
+                        if st.button(f"Pay {active_pool.monthly_contribution:,} {active_pool.currency} ({u.name})", key=f"pay_{u.user_id}", use_container_width=True):
+                            u.has_paid = True
+                            pools_dict[selected_pool_id] = active_pool.to_dict()
+                            global_state["pools"] = pools_dict
+                            if save_global_state_to_db(global_state):
+                                st.toast(f"Payment settled for {u.name}!")
+                                st.rerun()
+
+        # Akıllı Havuz Tetikleme Butonu
+        st.write("---")
         if len(active_pool.users) < active_pool.total_months:
             needed = active_pool.total_months - len(active_pool.users)
             st.warning(lang["wait_message"].format(count=needed))
         else:
-            if st.button(lang["btn_draw"], type="primary", use_container_width=True):
-                eligible = [u for u in active_pool.users if not u.has_received]
-                if not eligible:
-                    st.info("Döngü tamamlandı! / Cycle fully optimized!")
-                else:
-                    # Canlı FinTek API Bağlantı Efekti (Jüri Sunumu İllüzyonu)
-                    with st.spinner("Connecting to Banking-as-a-Service API & Locking Escrow Vault..."):
-                        time.sleep(1.5) # Gerçekçi API gecikmesi
-                    
-                    collected = 0
-                    details = []
-                    for u in active_pool.users:
-                        u.has_paid = True
-                        collected += active_pool.monthly_contribution
-                        if u.credit_score >= 500:
-                            details.append(f"🟢 [BaaS Webhook] API_200: {u.name} debited {active_pool.monthly_contribution:,} {active_pool.currency}")
-                        else:
-                            details.append(f"🛡️ [Insurance API] Low score detected for {u.name}. Liquidity pool credit guarantee deployed.")
-                    
-                    fee = collected * 0.01
-                    payout = collected - fee
-                    
-                    winner = random.choice(eligible)
-                    winner.has_received = True
-                    
-                    active_pool.history.append({"month": active_pool.current_month, "winner": winner.name, "payout": payout, "fee": fee, "details": details})
-                    active_pool.current_month += 1
-                    for u in active_pool.users: u.has_paid = False
-                    
-                    pools_dict[selected_pool_id] = active_pool.to_dict()
-                    global_state["pools"] = pools_dict
-                    if save_global_state_to_db(global_state):
-                        st.balloons()
-                        st.success(lang["won_message"].format(winner=winner.name, amount=payout, currency=active_pool.currency))
-                        st.rerun()
+            # Ödeme yapmayanların kontrolü
+            unpaid_users = [u for u in active_pool.users if not u.has_paid]
+            
+            if unpaid_users:
+                st.error(f"🔒 **Escrow Locked:** All participants must settle their payments before drawing the winner. **{len(unpaid_users)}** users pending.")
+                # Admin için "Hepsini Ödenmiş Yap" Hızlı Demo Butonu
+                if user_role == "Admin / Platform Owner":
+                    if st.button("⚡ Admin Hack: Simulate Auto-Debit for All", use_container_width=True):
+                        for u in active_pool.users:
+                            u.has_paid = True
+                        pools_dict[selected_pool_id] = active_pool.to_dict()
+                        global_state["pools"] = pools_dict
+                        if save_global_state_to_db(global_state):
+                            st.success("All users simulated as paid!")
+                            st.rerun()
+            else:
+                st.success("🔓 **Escrow Unlocked:** 100% of the funds are safely locked in the smart vault. Ready for distribution!")
+                if st.button(lang["btn_draw"], type="primary", use_container_width=True):
+                    eligible = [u for u in active_pool.users if not u.has_received]
+                    if not eligible:
+                        st.info("Döngü tamamlandı! / Cycle fully optimized!")
+                    else:
+                        with st.spinner("Connecting to Banking-as-a-Service API & Locking Escrow Vault..."):
+                            time.sleep(1.5)
+                        
+                        collected = 0
+                        details = []
+                        for u in active_pool.users:
+                            collected += active_pool.monthly_contribution
+                            if u.credit_score >= 500:
+                                details.append(f"🟢 [BaaS Webhook] API_200: {u.name} debited {active_pool.monthly_contribution:,} {active_pool.currency}")
+                            else:
+                                details.append(f"🛡️ [Insurance API] Credit cover deployed for {u.name}. Liquidity pool credit guarantee settled.")
+                        
+                        fee = collected * 0.01
+                        payout = collected - fee
+                        
+                        winner = random.choice(eligible)
+                        winner.has_received = True
+                        
+                        active_pool.history.append({"month": active_pool.current_month, "winner": winner.name, "payout": payout, "fee": fee, "details": details})
+                        active_pool.current_month += 1
+                        
+                        # Kura çekilince yeni ay için ödemeleri sıfırlayalım
+                        for u in active_pool.users: 
+                            u.has_paid = False
+                        
+                        pools_dict[selected_pool_id] = active_pool.to_dict()
+                        global_state["pools"] = pools_dict
+                        if save_global_state_to_db(global_state):
+                            st.balloons()
+                            st.success(lang["won_message"].format(winner=winner.name, amount=payout, currency=active_pool.currency))
+                            st.rerun()
 
 with right:
     st.subheader(lang["escrow_ledger"])
