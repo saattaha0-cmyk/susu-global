@@ -1,18 +1,78 @@
 import streamlit as st
 import json
-import os
 import random
 import pandas as pd
+import requests  # Bulut veritabanına bağlanmak için standart kütüphane
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Susu Global - Community Finance", page_icon="🌐", layout="wide")
+
+# Streamlit Secrets (Şifreler) Kontrolü
+SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
+
+# ==========================================
+# VERİTABANI BAĞLANTI FONKSİYONLARI (API)
+# ==========================================
+
+def load_state_from_db():
+    """Supabase bulut veritabanından güncel durumu çeker."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        st.warning("⚠️ Supabase API keys are missing in Secrets. Running in offline/temporary mode.")
+        return None
+    
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
+    # Belirlediğimiz tablodan veriyi çekiyoruz
+    url = f"{SUPABASE_URL}/rest/v1/susu_state?id=eq.US-GLOBAL-01"
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            rows = response.json()
+            if rows:
+                return rows[0]["data"]
+    except Exception as e:
+        st.error(f"Database Connection Error: {e}")
+    return None
+
+def save_state_to_db(data_dict):
+    """Supabase bulut veritabanına güncel durumu kaydeder (Upsert)."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return False
+    
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates"  # Varsa güncelle, yoksa yeni ekle (Upsert)
+    }
+    url = f"{SUPABASE_URL}/rest/v1/susu_state"
+    payload = {
+        "id": "US-GLOBAL-01",
+        "data": data_dict
+    }
+    
+    try:
+        # Supabase API bizden liste (array) bekler
+        response = requests.post(url, headers=headers, json=[payload])
+        return response.status_code in [200, 201]
+    except Exception as e:
+        st.error(f"Database Save Error: {e}")
+        return False
+
+# ==========================================
+# GİRİŞİM MANTIĞI VE SINIFLARI (CORE LOGIC)
+# ==========================================
 
 class SusuUser:
     def __init__(self, user_id, name, country, passport_verified, credit_score, has_paid=False, has_received=False):
         self.user_id = user_id
         self.name = name
         self.country = country
-        self.passport_verified = passport_verified  # KYC Kontrolü
+        self.passport_verified = passport_verified
         self.credit_score = credit_score
         self.has_paid = has_paid
         self.has_received = has_received
@@ -43,12 +103,11 @@ class SusuPool:
             return False, "Pool is already full!"
         
         user_id = len(self.users) + 1
-        # KYC Simülasyonu: Pasaport numarası girildiyse onay ver
         passport_ok = True if (passport and len(passport) >= 6) else False
         
         new_user = SusuUser(user_id, name, country, passport_ok, credit_score)
         self.users.append(new_user)
-        self.save_to_file()
+        self.save_to_cloud()
         return True, f"User {name} successfully onboarded (KYC Status: {'PASSED' if passport_ok else 'FAILED'})"
 
     def run_cycle(self):
@@ -58,7 +117,7 @@ class SusuPool:
 
         total_collected = 0
         details = []
-        fee_rate = 0.01  # %1 platform komisyonu (Yatırımcıların en sevdiği gelir modeli)
+        fee_rate = 0.01  # %1 platform komisyonu
         
         for u in self.users:
             u.has_paid = True
@@ -87,11 +146,11 @@ class SusuPool:
         for u in self.users:
             u.has_paid = False
             
-        self.save_to_file()
+        self.save_to_cloud()
         return True, f"{winner.name} received {payout_amount:,} {self.currency} (Platform Fee: {platform_fee:,} {self.currency})"
 
-    def save_to_file(self, filename="susu_global_data.json"):
-        data = {
+    def to_dict_for_db(self):
+        return {
             "pool_id": self.pool_id,
             "currency": self.currency,
             "monthly_contribution": self.monthly_contribution,
@@ -100,23 +159,23 @@ class SusuPool:
             "users": [u.to_dict() for u in self.users],
             "history": self.history
         }
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+
+    def save_to_cloud(self):
+        save_state_to_db(self.to_dict_for_db())
 
     @classmethod
-    def load_from_file(cls, filename="susu_global_data.json"):
-        if os.path.exists(filename):
-            with open(filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
+    def load_from_cloud(cls):
+        db_data = load_state_from_db()
+        if db_data:
             pool = cls(
-                pool_id=data["pool_id"],
-                currency=data["currency"],
-                monthly_contribution=data["monthly_contribution"],
-                total_months=data["total_months"],
-                current_month=data["current_month"],
-                history=data.get("history", [])
+                pool_id=db_data["pool_id"],
+                currency=db_data["currency"],
+                monthly_contribution=db_data["monthly_contribution"],
+                total_months=db_data["total_months"],
+                current_month=db_data["current_month"],
+                history=db_data.get("history", [])
             )
-            for u in data["users"]:
+            for u in db_data["users"]:
                 user = SusuUser(u["user_id"], u["name"], u["country"], u["passport_verified"], u["credit_score"], u["has_paid"], u["has_received"])
                 pool.users.append(user)
             return pool
@@ -126,7 +185,8 @@ class SusuPool:
 # WEB PORTAL ARAYÜZÜ (STREAMLIT)
 # ==========================================
 
-pool = SusuPool.load_from_file()
+# Bulut veritabanından veriyi yükle, yoksa çevrimdışı şablonu kullan
+pool = SusuPool.load_from_cloud()
 if pool is None:
     pool = SusuPool(pool_id="US-GLOBAL-01", currency="USD", monthly_contribution=1000, total_months=4)
 
@@ -134,6 +194,7 @@ if pool is None:
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=80)
     st.title("Susu Global Admin")
+    st.caption("🔒 Secured with Supabase PostgreSQL")
     st.write("---")
     
     st.subheader("KYC & Onboard New User")
@@ -153,10 +214,20 @@ with st.sidebar:
                 st.error(msg)
                 
     st.write("---")
-    if st.button("🚨 Reset Global Portal", use_container_width=True):
-        if os.path.exists("susu_global_data.json"):
-            os.remove("susu_global_data.json")
-        st.rerun()
+    if st.button("🚨 Reset Cloud Database", use_container_width=True):
+        # Veritabanını varsayılan başlangıç durumuna sıfırlar
+        default_state = {
+            "pool_id": "US-GLOBAL-01",
+            "currency": "USD",
+            "monthly_contribution": 1000,
+            "total_months": 4,
+            "current_month": 1,
+            "users": [],
+            "history": []
+        }
+        if save_state_to_db(default_state):
+            st.success("Cloud database successfully cleared!")
+            st.rerun()
 
 # Ana Sayfa Giriş
 st.title("🌐 SUSU GLOBAL: ROTATIONAL SAVINGS NETWORK")
@@ -183,7 +254,7 @@ st.write("---")
 left, right = st.columns([2, 1])
 
 with left:
-    st.subheader("👥 Verified Pool Participants")
+    st.subheader("👥 Verified Pool Participants (Live Cloud)")
     if not pool.users:
         st.info("No verified users in this pool yet. Please use the KYC Onboarding panel on the left.")
     else:
@@ -216,7 +287,7 @@ with left:
                     st.info(msg)
 
 with right:
-    st.subheader("🛡️ Escrow Ledger (Ledger Audit)")
+    st.subheader("🛡️ Escrow Ledger (Live Audit)")
     if not pool.history:
         st.info("No escrow transactions recorded yet.")
     else:
