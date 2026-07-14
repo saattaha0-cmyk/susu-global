@@ -1,3 +1,14 @@
+# --- PANEL (DASHBOARD) ---
+st.subheader("Finansal Durumum")
+# SQL'de oluşturduğumuz görünümden veriyi çekiyoruz
+res_summary = requests.get(f"{SUPABASE_URL}/rest/v1/user_summary?user_id=eq.9741f74f-c083-4832-b54b-4662cd8b0cc8", headers=HEADERS)
+data = res_summary.json()
+
+if data:
+    toplam = data[0]['total_saved']
+    st.metric(label="Toplam Birikimim", value=f"{toplam} TL")
+else:
+    st.write("Henüz bir işlem yapmadın, ilk havuzuna katıl!")
 import streamlit as st
 import requests
 
