@@ -5,9 +5,9 @@ import pandas as pd
 import requests
 
 # Sayfa Ayarları
-st.set_page_config(page_title="Susu Global - Community Finance", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Susu Global - Multi-Pool Platform", page_icon="🌐", layout="wide")
 
-# Streamlit Secrets (Şifreler) Kontrolü
+# Streamlit Secrets Kontrolü
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
@@ -15,65 +15,64 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 # AKILLI URL TEMİZLEYİCİ (URL CLEANER)
 # ==========================================
 def get_clean_base_url():
-    """Kullanıcının kopyaladığı URL'deki fazlalıkları (eğik çizgi veya /rest/v1) temizler."""
-    if not SUPABASE_URL:
-        return ""
-    
+    if not SUPABASE_URL: return ""
     url = SUPABASE_URL.strip()
-    
-    # Eğer url sonunda eğik çizgi varsa temizle
-    if url.endswith("/"):
-        url = url[:-1]
-        
-    # Eğer kullanıcı adresi zaten /rest/v1 ile kopyaladıysa, o kısmı temizle (çift yazılmasın diye)
+    if url.endswith("/"): url = url[:-1]
     if "/rest/v1" in url:
         url = url.replace("/rest/v1", "")
-        if url.endswith("/"):
-            url = url[:-1]
-            
+        if url.endswith("/"): url = url[:-1]
     return url
 
 # ==========================================
-# VERİTABANI BAĞLANTI FONKSİYONLARI (API)
+# VERİTABANI ÇOKLU HAVUZ BAĞLANTI SİSTEMİ
 # ==========================================
-
-def load_state_from_db():
-    """Supabase bulut veritabanından güncel durumu çeker."""
+def load_global_state_from_db():
+    """Tüm havuzları içeren küresel durumu Supabase'den çeker."""
     base_url = get_clean_base_url()
     if not base_url or not SUPABASE_KEY:
-        st.warning("⚠️ Streamlit Secrets ayarlarında SUPABASE_URL veya SUPABASE_KEY eksik!")
+        st.warning("⚠️ API anahtarları eksik! Çevrimdışı modda çalışılıyor.")
         return None
     
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
     }
-    # Temiz URL ile tam endpoint adresi oluşturuluyor
     url = f"{base_url}/rest/v1/susu_state?id=eq.US-GLOBAL-01"
     
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             rows = response.json()
-            if rows:
+            if rows and "pools" in rows[0]["data"]:
                 return rows[0]["data"]
             else:
-                st.info("ℹ️ Veritabanında başlangıç verisi bulunamadı, yeni oluşturuluyor...")
-                default_data = {"pool_id": "US-GLOBAL-01", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []}
-                save_state_to_db(default_data)
-                return default_data
+                # Eğer veritabanı boşsa varsayılan ilk havuz şablonunu oluşturalım
+                default_state = {
+                    "pools": {
+                        "Alpha-USD": {
+                            "pool_id": "Alpha-USD",
+                            "pool_name": "🌐 Global USD Alpha Pool",
+                            "currency": "USD",
+                            "monthly_contribution": 1000,
+                            "total_months": 4,
+                            "current_month": 1,
+                            "users": [],
+                            "history": []
+                        }
+                    }
+                }
+                save_global_state_to_db(default_state)
+                return default_state
         else:
-            st.error(f"❌ Veritabanı Bağlantı Hatası (Kod {response.status_code}): {response.text}")
+            st.error(f"❌ Veritabanı Hatası (Kod {response.status_code}): {response.text}")
     except Exception as e:
-        st.error(f"❌ Veritabanı Bağlantı Hatası: {e}")
+        st.error(f"❌ Bağlantı Hatası: {e}")
     return None
 
-def save_state_to_db(data_dict):
-    """Supabase bulut veritabanına güncel durumu kaydeder."""
+def save_global_state_to_db(global_state_dict):
+    """Tüm havuzların son durumunu tek seferde veritabanına kilitler."""
     base_url = get_clean_base_url()
-    if not base_url or not SUPABASE_KEY:
-        st.error("⚠️ Kaydedilemedi: API anahtarları eksik.")
-        return False
+    if not base_url or not SUPABASE_KEY: return False
     
     headers = {
         "apikey": SUPABASE_KEY,
@@ -84,24 +83,19 @@ def save_state_to_db(data_dict):
     url = f"{base_url}/rest/v1/susu_state"
     payload = {
         "id": "US-GLOBAL-01",
-        "data": data_dict
+        "data": global_state_dict
     }
     
     try:
         response = requests.post(url, headers=headers, json=[payload])
-        if response.status_code in [200, 201]:
-            return True
-        else:
-            st.error(f"❌ Veri Kaydetme Hatası (Kod {response.status_code}): {response.text}")
-            return False
+        return response.status_code in [200, 201]
     except Exception as e:
-        st.error(f"❌ Veri Kaydetme Hatası: {e}")
+        st.error(f"❌ Kaydetme Hatası: {e}")
         return False
 
 # ==========================================
-# GİRİŞİM MANTIĞI VE SINIFLARI (CORE LOGIC)
+# GİRİŞİM MANTIĞI NESNELERİ (DATA MODELS)
 # ==========================================
-
 class SusuUser:
     def __init__(self, user_id, name, country, passport_verified, credit_score, has_paid=False, has_received=False):
         self.user_id = user_id
@@ -114,18 +108,15 @@ class SusuUser:
 
     def to_dict(self):
         return {
-            "user_id": self.user_id,
-            "name": self.name,
-            "country": self.country,
-            "passport_verified": self.passport_verified,
-            "credit_score": self.credit_score,
-            "has_paid": self.has_paid,
-            "has_received": self.has_received
+            "user_id": self.user_id, "name": self.name, "country": self.country,
+            "passport_verified": self.passport_verified, "credit_score": self.credit_score,
+            "has_paid": self.has_paid, "has_received": self.has_received
         }
 
 class SusuPool:
-    def __init__(self, pool_id, currency, monthly_contribution, total_months, current_month=1, history=None):
+    def __init__(self, pool_id, pool_name, currency, monthly_contribution, total_months, current_month=1, history=None):
         self.pool_id = pool_id
+        self.pool_name = pool_name
         self.currency = currency
         self.monthly_contribution = monthly_contribution
         self.total_months = total_months
@@ -133,205 +124,189 @@ class SusuPool:
         self.users = []
         self.history = history if history is not None else []
 
-    def add_user(self, name, country, passport, credit_score):
-        if len(self.users) >= self.total_months:
-            return False, "Pool is already full!"
-        
-        user_id = len(self.users) + 1
-        passport_ok = True if (passport and len(passport) >= 6) else False
-        
-        new_user = SusuUser(user_id, name, country, passport_ok, credit_score)
-        self.users.append(new_user)
-        
-        if self.save_to_cloud():
-            return True, f"User {name} successfully onboarded!"
-        else:
-            self.users.pop()
-            return False, "Database save failed. Please check the red error box above."
-
-    def run_cycle(self):
-        eligible = [u for u in self.users if not u.has_received]
-        if not eligible:
-            return False, "All cycles completed!"
-
-        total_collected = 0
-        details = []
-        fee_rate = 0.01
-        
-        for u in self.users:
-            u.has_paid = True
-            total_collected += self.monthly_contribution
-            if u.credit_score >= 500:
-                details.append(f"✅ {u.name} paid {self.monthly_contribution:,} {self.currency}")
-            else:
-                details.append(f"🛡️ BaaS Escrow Guarantee covered {u.name} for {self.monthly_contribution:,} {self.currency}")
-
-        platform_fee = total_collected * fee_rate
-        payout_amount = total_collected - platform_fee
-
-        winner = random.choice(eligible)
-        winner.has_received = True
-
-        log_entry = {
-            "month": self.current_month,
-            "winner": winner.name,
-            "payout": payout_amount,
-            "fee": platform_fee,
-            "details": details
-        }
-        self.history.append(log_entry)
-        
-        self.current_month += 1
-        for u in self.users:
-            u.has_paid = False
-            
-        if self.save_to_cloud():
-            return True, f"{winner.name} received {payout_amount:,} {self.currency}"
-        return False, "Failed to save cycle to cloud database."
-
-    def to_dict_for_db(self):
+    def to_dict(self):
         return {
-            "pool_id": self.pool_id,
-            "currency": self.currency,
-            "monthly_contribution": self.monthly_contribution,
-            "total_months": self.total_months,
-            "current_month": self.current_month,
-            "users": [u.to_dict() for u in self.users],
+            "pool_id": self.pool_id, "pool_name": self.pool_name, "currency": self.currency,
+            "monthly_contribution": self.monthly_contribution, "total_months": self.total_months,
+            "current_month": self.current_month, "users": [u.to_dict() for u in self.users],
             "history": self.history
         }
 
-    def save_to_cloud(self):
-        return save_state_to_db(self.to_dict_for_db())
+# ==========================================
+# GLOBAL DURUM YÖNETİMİ
+# ==========================================
+global_state = load_global_state_from_db()
+if not global_state:
+    global_state = {"pools": {"Alpha-USD": {"pool_id": "Alpha-USD", "pool_name": "🌐 Global USD Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []}}}
 
-    @classmethod
-    def load_from_cloud(cls):
-        db_data = load_state_from_db()
-        if db_data:
-            pool = cls(
-                pool_id=db_data["pool_id"],
-                currency=db_data["currency"],
-                monthly_contribution=db_data["monthly_contribution"],
-                total_months=db_data["total_months"],
-                current_month=db_data["current_month"],
-                history=db_data.get("history", [])
-            )
-            for u in db_data["users"]:
-                user = SusuUser(u["user_id"], u["name"], u["country"], u["passport_verified"], u["credit_score"], u["has_paid"], u["has_received"])
-                pool.users.append(user)
-            return pool
-        return None
+pools_dict = global_state["pools"]
 
 # ==========================================
-# WEB PORTAL ARAYÜZÜ (STREAMLIT)
+# WEB PORTAL ARAYÜZÜ (STREAMLIT MULTI-POOL)
 # ==========================================
 
-pool = SusuPool.load_from_cloud()
-if pool is None:
-    pool = SusuPool(pool_id="US-GLOBAL-01", currency="USD", monthly_contribution=1000, total_months=4)
-
-# Yan Panel
+# Sol Menü Tasarımı
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=80)
-    st.title("Susu Global Admin")
-    st.caption("🔒 Secured with Supabase PostgreSQL")
+    st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=70)
+    st.title("Susu Global Engine")
+    st.caption("🔒 Multi-Tenant PostgreSQL Active")
     st.write("---")
     
-    st.subheader("KYC & Onboard New User")
+    # 🏢 HAVUZ SEÇİM PANELİ
+    st.subheader("📁 Select Active Savings Pool")
+    pool_options = {p_id: p_data["pool_name"] for p_id, p_data in pools_dict.items()}
+    selected_pool_id = st.selectbox("Choose a room to manage:", options=list(pool_options.keys()), format_func=lambda x: pool_options[x])
+    
+    # Seçili havuz verisini nesneye (Object) dönüştürelim
+    p_data = pools_dict[selected_pool_id]
+    active_pool = SusuPool(p_data["pool_id"], p_data["pool_name"], p_data["currency"], p_data["monthly_contribution"], p_data["total_months"], p_data["current_month"], p_data.get("history", []))
+    for u in p_data["users"]:
+        active_pool.users.append(SusuUser(u["user_id"], u["name"], u["country"], u["passport_verified"], u["credit_score"], u["has_paid"], u["has_received"]))
+
+    st.write("---")
+    
+    # 🆕 YENİ HAVUZ OLUŞTURMA FORMU
+    st.subheader("➕ Deploy New Custom Pool")
+    with st.expander("Configure New Room Parameters", expanded=False):
+        new_id = st.text_input("Unique Pool ID (e.g., Istanbul-TRY)", placeholder="No spaces allowed").strip()
+        new_name = st.text_input("Display Name", placeholder="e.g., Istanbul Financial Freedom")
+        new_curr = st.selectbox("Pool Currency", ["USD", "TRY", "EUR", "GBP"])
+        new_contrib = st.number_input("Monthly Contribution Amount", min_value=10, value=20000, step=500)
+        new_duration = st.slider("Total Members / Months", 3, 12, 4)
+        create_btn = st.button("🚀 Launch Pool to Cloud", use_container_width=True)
+        
+        if create_btn and new_id and new_name:
+            if new_id in pools_dict:
+                st.error("This Pool ID already exists!")
+            else:
+                pools_dict[new_id] = {
+                    "pool_id": new_id, "pool_name": f"✨ {new_name} ({new_curr})", "currency": new_curr,
+                    "monthly_contribution": new_contrib, "total_months": new_duration,
+                    "current_month": 1, "users": [], "history": []
+                }
+                global_state["pools"] = pools_dict
+                if save_global_state_to_db(global_state):
+                    st.success(f"Pool '{new_name}' deployed successfully!")
+                    st.rerun()
+
+    st.write("---")
+    
+    # 👥 SEÇİLİ HAVUZA ÜYE EKLEME FORMU
+    st.subheader(f"👤 KYC Onboard: {active_pool.pool_id}")
     with st.form("onboard_form", clear_on_submit=True):
         name = st.text_input("Full Name")
-        country = st.selectbox("Country of Residence", ["United States", "United Kingdom", "Germany", "Turkey", "Nigeria", "Mexico"])
-        passport = st.text_input("Passport Number (for KYC verification)")
-        score = st.slider("Financial Credit Score", 300, 850, 720)
-        submit = st.form_submit_button("Verify & Add to Pool")
+        country = st.selectbox("Country", ["Turkey", "United States", "United Kingdom", "Germany", "Nigeria", "Mexico"])
+        passport = st.text_input("Passport Number (KYC)")
+        score = st.slider("FICO / Credit Score", 300, 850, 740)
+        submit = st.form_submit_button("Verify & Add to Selected Pool")
         
         if submit and name:
-            success, msg = pool.add_user(name, country, passport, score)
-            if success:
-                st.success(msg)
-                st.rerun()
+            if len(active_pool.users) >= active_pool.total_months:
+                st.error("This specific pool is already full!")
             else:
-                st.error(msg)
+                user_id = len(active_pool.users) + 1
+                pass_ok = True if (passport and len(passport) >= 6) else False
+                new_user = SusuUser(user_id, name, country, pass_ok, score)
+                active_pool.users.append(new_user)
                 
-    st.write("---")
-    if st.button("🚨 Reset Cloud Database", use_container_width=True):
-        default_state = {
-            "pool_id": "US-GLOBAL-01",
-            "currency": "USD",
-            "monthly_contribution": 1000,
-            "total_months": 4,
-            "current_month": 1,
-            "users": [],
-            "history": []
-        }
-        if save_state_to_db(default_state):
-            st.success("Cloud database successfully cleared!")
-            st.rerun()
+                # Küresel durumu güncelle ve kaydet
+                pools_dict[selected_pool_id] = active_pool.to_dict()
+                global_state["pools"] = pools_dict
+                if save_global_state_to_db(global_state):
+                    st.success(f"Added {name} to {active_pool.pool_id}!")
+                    st.rerun()
 
-# Ana Sayfa Giriş
-st.title("🌐 SUSU GLOBAL: ROTATIONAL SAVINGS NETWORK")
-st.write("Secure, cross-border decentralized social savings with institutional Escrow Guarantee.")
+# ==========================================
+# ANA PANEL (DİNAMİK EKRAN GÜNCELLEME)
+# ==========================================
+st.title(f"🌐 SUSU PLATFORM: {active_pool.pool_name.upper()}")
+st.write(f"Managing decentralized rotational escrow for room **{active_pool.pool_id}**.")
 
-# Yatırımcı Paneli (Pitch Metrics)
-st.subheader("📈 Investor Dashboard (SaaS Metrics)")
+# SaaS Metrikleri (Seçili havuza göre dinamik hesaplanır)
+st.subheader("📈 Active Room Metrics (SaaS Dashboard)")
 col1, col2, col3, col4 = st.columns(4)
 
-total_volume = sum([h['payout'] for h in pool.history])
-total_revenue = sum([h['fee'] for h in pool.history])
+total_volume = sum([h['payout'] for h in active_pool.history])
+total_revenue = sum([h['fee'] for h in active_pool.history])
 
 with col1:
-    st.metric(label="Total Transaction Volume (GMV)", value=f"{total_volume:,} {pool.currency}")
+    st.metric(label="Room Volume (GMV)", value=f"{total_volume:,} {active_pool.currency}")
 with col2:
-    st.metric(label="Platform Revenue (%1 SaaS Fee)", value=f"{total_revenue:,} {pool.currency}")
+    st.metric(label="1% Take Rate Revenue", value=f"{total_revenue:,} {active_pool.currency}")
 with col3:
-    st.metric(label="Active Users In Pool", value=f"{len(pool.users)} / {pool.total_months}")
+    st.metric(label="Participants", value=f"{len(active_pool.users)} / {active_pool.total_months}")
 with col4:
-    st.metric(label="Current Cycle Phase", value=f"Month {pool.current_month} of {pool.total_months}")
+    st.metric(label="Cycle Phase", value=f"Month {active_pool.current_month} of {active_pool.total_months}")
 
 st.write("---")
 
 left, right = st.columns([2, 1])
 
 with left:
-    st.subheader("👥 Verified Pool Participants (Live Cloud)")
-    if not pool.users:
-        st.info("No verified users in this pool yet. Please use the KYC Onboarding panel on the left.")
+    st.subheader("👥 Room Participants (Live Cloud Data)")
+    if not active_pool.users:
+        st.info(f"No users in '{active_pool.pool_id}' yet. Use the KYC panel on the left to add members.")
     else:
         user_list = []
-        for u in pool.users:
-            kyc_status = "🛡️ VERIFIED (KYC)" if u.passport_verified else "❌ UNVERIFIED"
-            payout_status = "🎁 Received Funds" if u.has_received else "⏳ Waiting Cycle"
+        for u in active_pool.users:
+            kyc_status = "🛡️ VERIFIED" if u.passport_verified else "❌ FAILED"
+            payout_status = "🎁 Distributed" if u.has_received else "⏳ In Escrow Queue"
             user_list.append({
-                "User ID": u.user_id,
-                "Name": u.name,
-                "Region": u.country,
-                "KYC Verification": kyc_status,
-                "FICO Score": u.credit_score,
-                "Status": payout_status
+                "ID": u.user_id, "Member Name": u.name, "Region": u.country,
+                "KYC Registry": kyc_status, "Credit Rating": u.credit_score, "Status": payout_status
             })
         st.dataframe(pd.DataFrame(user_list), use_container_width=True, hide_index=True)
         
+        # Akıllı Sözleşme / Kura Tetikleme Tetikleyici Butonu
         st.write("")
-        if len(pool.users) < pool.total_months:
-            st.warning(f"Waiting for pool to fill. Need {pool.total_months - len(pool.users)} more verified user(s) to start the smart escrow contract.")
+        if len(active_pool.users) < active_pool.total_months:
+            st.warning(f"Waiting for pool to fill. Need {active_pool.total_months - len(active_pool.users)} more members.")
         else:
-            if st.button("🔌 Execute Monthly Escrow & Draw Winner", type="primary", use_container_width=True):
-                success, msg = pool.run_cycle()
-                if success:
-                    st.balloons()
-                    st.success(msg)
-                    st.rerun()
+            if st.button("🔌 Release Monthly Escrow Funds & Draw Winner", type="primary", use_container_width=True):
+                eligible = [u for u in active_pool.users if not u.has_received]
+                if not eligible:
+                    st.info("This pool's rotational cycle has fully completed!")
                 else:
-                    st.error(msg)
+                    collected = 0
+                    details = []
+                    for u in active_pool.users:
+                        u.has_paid = True
+                        collected += active_pool.monthly_contribution
+                        if u.credit_score >= 500:
+                            details.append(f"✅ {u.name} deposited {active_pool.monthly_contribution:,} {active_pool.currency}")
+                        else:
+                            details.append(f"🛡️ Escrow Insurance covered low-score user {u.name}")
+                    
+                    fee = collected * 0.01
+                    payout = collected - fee
+                    
+                    winner = random.choice(eligible)
+                    winner.has_received = True
+                    
+                    active_pool.history.append({
+                        "month": active_pool.current_month, "winner": winner.name,
+                        "payout": payout, "fee": fee, "details": details
+                    })
+                    
+                    active_pool.current_month += 1
+                    for u in active_pool.users: u.has_paid = False
+                    
+                    # Küresel veriyi güncelle ve buluta fırlat
+                    pools_dict[selected_pool_id] = active_pool.to_dict()
+                    global_state["pools"] = pools_dict
+                    if save_global_state_to_db(global_state):
+                        st.balloons()
+                        st.success(f"Success! {winner.name} won the draw and received {payout:,} {active_pool.currency}!")
+                        st.rerun()
 
 with right:
-    st.subheader("🛡️ Escrow Ledger (Live Audit)")
-    if not pool.history:
-        st.info("No escrow transactions recorded yet.")
+    st.subheader("🛡️ Audit Trails (Escrow Ledger)")
+    if not active_pool.history:
+        st.info("No logs for this pool.")
     else:
-        for event in reversed(pool.history):
+        for event in reversed(active_pool.history):
             with st.expander(f"📅 Cycle Month {event['month']} Audit"):
-                st.write(f"**Escrow Release Amount:** {event['payout']:,} {pool.currency}")
-                st.write(f"**Susu Platform Take Rate:** {event['fee']:,} {pool.currency}")
-                st.write("**On-Chain Escrow Clearings:**")
+                st.write(f"**Payout:** {event['payout']:,} {active_pool.currency}")
+                st.write(f"**Platform Fee:** {event['fee']:,} {active_pool.currency}")
                 for d in event['details']:
                     st.write(d)
