@@ -5,14 +5,14 @@ import pandas as pd
 import requests
 
 # Sayfa Ayarları
-st.set_page_config(page_title="Susu Global - Multi-Pool Platform", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Susu Global - FinTech Platform", page_icon="🌐", layout="wide")
 
 # Streamlit Secrets Kontrolü
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 # ==========================================
-# AKILLI URL TEMİZLEYİCİ (URL CLEANER)
+# AKILLI URL TEMİZLEYİCİ
 # ==========================================
 def get_clean_base_url():
     if not SUPABASE_URL: return ""
@@ -24,10 +24,63 @@ def get_clean_base_url():
     return url
 
 # ==========================================
-# VERİTABANI ÇOKLU HAVUZ BAĞLANTI SİSTEMİ
+# 🌍 KÜLTÜREL YERELLEŞTİRME MOTORU (LOCALIZATION ENGINE)
+# ==========================================
+LOCALIZATION_MAP = {
+    "TRY": {
+        "app_title": "🪙 ALTIN GÜNÜ GLOBAL: YENİ NESİL DİJİTAL BİRİKİM",
+        "sub_title": "Güvenli, şeffaf ve akıllı emanet kasası altyapısıyla geleneksel altın gününü dünya standartlarına taşıyın.",
+        "pool_label": "Aktif Birikim Odası (Altın Günü)",
+        "onboard_title": "👤 Katılımcı Ekle (KYC Doğrulama)",
+        "participants_title": "👥 Doğrulanmış Katılımcı Listesi (Canlı Bulut Verisi)",
+        "escrow_ledger": "🛡️ Kasa Hesap Defteri (Denetim İzi)",
+        "metrics_volume": "Toplam Dönen Hacim (GMV)",
+        "metrics_revenue": "Platform Geliri (%1 Hizmet Bedeli)",
+        "metrics_active": "Aktif Katılımcı",
+        "metrics_phase": "Mevcut Tur / Kabul Günü",
+        "phase_text": "{month}. Kabul Günü / Toplam {total} Ay",
+        "btn_draw": "🔌 Kura Çek ve Aylık Birikimi Dağıt",
+        "btn_add": "Kimlik Doğrula ve Gruba Ekle",
+        "wait_message": "Grubun başlaması için {count} katılımcıya daha ihtiyaç var. Akıllı escrow sözleşmesi kilitlendi.",
+        "kyc_verified": "🛡️ DOĞRULANDI (KYC)",
+        "kyc_failed": "❌ BAŞARISIZ",
+        "status_received": "🎁 Ödemesini Almış",
+        "status_waiting": "⏳ Sırasını Bekliyor",
+        "won_message": "Tebrikler! Kurayı {winner} kazandı ve toplam {amount:,} {currency} ödeme aldı!",
+        "insurance_covered": "🛡️ Düşük kredi skoru nedeniyle BaaS Teminat Sigortası {name} adına güvence sağladı."
+    },
+    "DEFAULT": {
+        "app_title": "🌐 SUSU GLOBAL: ROTATIONAL SAVINGS NETWORK",
+        "sub_title": "Secure, cross-border decentralized social savings with institutional Escrow Guarantee.",
+        "pool_label": "Active Savings Pool",
+        "onboard_title": "👤 KYC Onboard User",
+        "participants_title": "👥 Verified Pool Participants (Live Cloud Data)",
+        "escrow_ledger": "🛡️ Audit Trails (Escrow Ledger)",
+        "metrics_volume": "Room Volume (GMV)",
+        "metrics_revenue": "1% Take Rate Revenue",
+        "metrics_active": "Participants",
+        "metrics_phase": "Cycle Phase",
+        "phase_text": "Month {month} of {total}",
+        "btn_draw": "🔌 Release Monthly Escrow Funds & Draw Winner",
+        "btn_add": "Verify & Add to Selected Pool",
+        "wait_message": "Waiting for pool to fill. Need {count} more members.",
+        "kyc_verified": "🛡️ VERIFIED",
+        "kyc_failed": "❌ FAILED",
+        "status_received": "🎁 Distributed",
+        "status_waiting": "⏳ In Escrow Queue",
+        "won_message": "Success! {winner} won the draw and received {amount:,} {currency}!",
+        "insurance_covered": "🛡️ Escrow Insurance covered low-score user {name}"
+    }
+}
+
+def get_locale(currency):
+    """Seçilen havuzun para birimine göre dil ve terim setini döner."""
+    return LOCALIZATION_MAP.get(currency, LOCALIZATION_MAP["DEFAULT"])
+
+# ==========================================
+# VERİTABANI BAĞLANTI SİSTEMİ
 # ==========================================
 def load_global_state_from_db():
-    """Tüm havuzları içeren küresel durumu Supabase'den çeker."""
     base_url = get_clean_base_url()
     if not base_url or not SUPABASE_KEY:
         st.warning("⚠️ API anahtarları eksik! Çevrimdışı modda çalışılıyor.")
@@ -46,7 +99,7 @@ def load_global_state_from_db():
             if rows and "pools" in rows[0]["data"]:
                 return rows[0]["data"]
             else:
-                # Eğer veritabanı boşsa varsayılan ilk havuz şablonunu oluşturalım
+                # Varsayılan başlangıç havuzları (Özelleştirilmiş)
                 default_state = {
                     "pools": {
                         "Alpha-USD": {
@@ -54,6 +107,16 @@ def load_global_state_from_db():
                             "pool_name": "🌐 Global USD Alpha Pool",
                             "currency": "USD",
                             "monthly_contribution": 1000,
+                            "total_months": 4,
+                            "current_month": 1,
+                            "users": [],
+                            "history": []
+                        },
+                        "Finansal-Ozgurluk": {
+                            "pool_id": "Finansal-Ozgurluk",
+                            "pool_name": "🪙 Finansal Özgürlük Grubu",
+                            "currency": "TRY",
+                            "monthly_contribution": 20000,
                             "total_months": 4,
                             "current_month": 1,
                             "users": [],
@@ -70,7 +133,6 @@ def load_global_state_from_db():
     return None
 
 def save_global_state_to_db(global_state_dict):
-    """Tüm havuzların son durumunu tek seferde veritabanına kilitler."""
     base_url = get_clean_base_url()
     if not base_url or not SUPABASE_KEY: return False
     
@@ -132,73 +194,77 @@ class SusuPool:
             "history": self.history
         }
 
-# ==========================================
-# GLOBAL DURUM YÖNETİMİ
-# ==========================================
+# Global Durumu Çek
 global_state = load_global_state_from_db()
 if not global_state:
-    global_state = {"pools": {"Alpha-USD": {"pool_id": "Alpha-USD", "pool_name": "🌐 Global USD Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []}}}
+    global_state = {
+        "pools": {
+            "Alpha-USD": {"pool_id": "Alpha-USD", "pool_name": "🌐 Global USD Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []},
+            "Finansal-Ozgurluk": {"pool_id": "Finansal-Ozgurluk", "pool_name": "🪙 Finansal Özgürlük Grubu", "currency": "TRY", "monthly_contribution": 20000, "total_months": 4, "current_month": 1, "users": [], "history": []}
+        }
+    }
 
 pools_dict = global_state["pools"]
 
 # ==========================================
-# WEB PORTAL ARAYÜZÜ (STREAMLIT MULTI-POOL)
+# WEB PORTAL ARAYÜZÜ (STREAMLIT MULTI-LOCALE)
 # ==========================================
 
 # Sol Menü Tasarımı
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=70)
     st.title("Susu Global Engine")
-    st.caption("🔒 Multi-Tenant PostgreSQL Active")
+    st.caption("🔒 Multi-Tenant & Multi-Locale Active")
     st.write("---")
     
-    # 🏢 HAVUZ SEÇİM PANELİ
+    # 📁 HAVUZ SEÇİM PANELİ
     st.subheader("📁 Select Active Savings Pool")
     pool_options = {p_id: p_data["pool_name"] for p_id, p_data in pools_dict.items()}
     selected_pool_id = st.selectbox("Choose a room to manage:", options=list(pool_options.keys()), format_func=lambda x: pool_options[x])
     
-    # Seçili havuz verisini nesneye (Object) dönüştürelim
+    # Seçili havuz verisini nesneye aktaralım
     p_data = pools_dict[selected_pool_id]
     active_pool = SusuPool(p_data["pool_id"], p_data["pool_name"], p_data["currency"], p_data["monthly_contribution"], p_data["total_months"], p_data["current_month"], p_data.get("history", []))
     for u in p_data["users"]:
         active_pool.users.append(SusuUser(u["user_id"], u["name"], u["country"], u["passport_verified"], u["credit_score"], u["has_paid"], u["has_received"]))
 
+    # Aktif dil setini seçili para birimine göre alalım
+    lang = get_locale(active_pool.currency)
+
     st.write("---")
     
     # 🆕 YENİ HAVUZ OLUŞTURMA FORMU
-    st.subheader("➕ Deploy New Custom Pool")
+    st.subheader("🆕 Deploy New Custom Pool")
     with st.expander("Configure New Room Parameters", expanded=False):
-        new_id = st.text_input("Unique Pool ID (e.g., Istanbul-TRY)", placeholder="No spaces allowed").strip()
-        new_name = st.text_input("Display Name", placeholder="e.g., Istanbul Financial Freedom")
-        new_curr = st.selectbox("Pool Currency", ["USD", "TRY", "EUR", "GBP"])
-        new_contrib = st.number_input("Monthly Contribution Amount", min_value=10, value=20000, step=500)
+        new_id = st.text_input("Unique Pool ID (e.g., Izmir-Club)", placeholder="No spaces allowed").strip()
+        new_name = st.text_input("Display Name", placeholder="e.g., Ege Birikim Grubu")
+        new_curr = st.selectbox("Pool Currency", ["TRY", "USD", "EUR", "GBP"])
+        new_contrib = st.number_input("Monthly Contribution Amount", min_value=10, value=1000, step=10)
         new_duration = st.slider("Total Members / Months", 3, 12, 4)
         create_btn = st.button("🚀 Launch Pool to Cloud", use_container_width=True)
         
         if create_btn and new_id and new_name:
-            if new_id in pools_dict:
-                st.error("This Pool ID already exists!")
-            else:
-                pools_dict[new_id] = {
-                    "pool_id": new_id, "pool_name": f"✨ {new_name} ({new_curr})", "currency": new_curr,
-                    "monthly_contribution": new_contrib, "total_months": new_duration,
-                    "current_month": 1, "users": [], "history": []
-                }
-                global_state["pools"] = pools_dict
-                if save_global_state_to_db(global_state):
-                    st.success(f"Pool '{new_name}' deployed successfully!")
-                    st.rerun()
+            prefix = "🪙" if new_curr == "TRY" else "🌐"
+            pools_dict[new_id] = {
+                "pool_id": new_id, "pool_name": f"{prefix} {new_name} ({new_curr})", "currency": new_curr,
+                "monthly_contribution": new_contrib, "total_months": new_duration,
+                "current_month": 1, "users": [], "history": []
+            }
+            global_state["pools"] = pools_dict
+            if save_global_state_to_db(global_state):
+                st.success(f"Pool '{new_name}' deployed successfully!")
+                st.rerun()
 
     st.write("---")
     
-    # 👥 SEÇİLİ HAVUZA ÜYE EKLEME FORMU
-    st.subheader(f"👤 KYC Onboard: {active_pool.pool_id}")
+    # 👥 SEÇİLİ HAVUZA ÜYE EKLEME FORMU (YERELLEŞTİRİLMİŞ)
+    st.subheader(lang["onboard_title"])
     with st.form("onboard_form", clear_on_submit=True):
         name = st.text_input("Full Name")
         country = st.selectbox("Country", ["Turkey", "United States", "United Kingdom", "Germany", "Nigeria", "Mexico"])
         passport = st.text_input("Passport Number (KYC)")
         score = st.slider("FICO / Credit Score", 300, 850, 740)
-        submit = st.form_submit_button("Verify & Add to Selected Pool")
+        submit = st.form_submit_button(lang["btn_add"])
         
         if submit and name:
             if len(active_pool.users) >= active_pool.total_months:
@@ -213,59 +279,74 @@ with st.sidebar:
                 pools_dict[selected_pool_id] = active_pool.to_dict()
                 global_state["pools"] = pools_dict
                 if save_global_state_to_db(global_state):
-                    st.success(f"Added {name} to {active_pool.pool_id}!")
+                    st.success(f"Successfully onboarded {name}!")
                     st.rerun()
 
-# ==========================================
-# ANA PANEL (DİNAMİK EKRAN GÜNCELLEME)
-# ==========================================
-st.title(f"🌐 SUSU PLATFORM: {active_pool.pool_name.upper()}")
-st.write(f"Managing decentralized rotational escrow for room **{active_pool.pool_id}**.")
+    # SIFIRLAMA BUTONU
+    st.write("---")
+    if st.button("🚨 Factory Reset Database", use_container_width=True):
+        default_state = {
+            "pools": {
+                "Alpha-USD": {"pool_id": "Alpha-USD", "pool_name": "🌐 Global USD Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []},
+                "Finansal-Ozgurluk": {"pool_id": "Finansal-Ozgurluk", "pool_name": "🪙 Finansal Özgürlük Grubu", "currency": "TRY", "monthly_contribution": 20000, "total_months": 4, "current_month": 1, "users": [], "history": []}
+            }
+        }
+        if save_state_to_db(default_state):
+            st.success("Database fully reset!")
+            st.rerun()
 
-# SaaS Metrikleri (Seçili havuza göre dinamik hesaplanır)
-st.subheader("📈 Active Room Metrics (SaaS Dashboard)")
+# ==========================================
+# ANA PANEL (YERELLEŞTİRİLMİŞ EKRAN)
+# ==========================================
+st.title(lang["app_title"])
+st.write(lang["sub_title"])
+st.info(f"📍 {lang['pool_label']}: **{active_pool.pool_name}** | {active_pool.monthly_contribution:,} {active_pool.currency}/Ay")
+
+# SaaS Metrikleri (Yerelleştirilmiş)
+st.subheader("📊 Room Performance (SaaS Metrics)")
 col1, col2, col3, col4 = st.columns(4)
 
 total_volume = sum([h['payout'] for h in active_pool.history])
 total_revenue = sum([h['fee'] for h in active_pool.history])
 
 with col1:
-    st.metric(label="Room Volume (GMV)", value=f"{total_volume:,} {active_pool.currency}")
+    st.metric(label=lang["metrics_volume"], value=f"{total_volume:,} {active_pool.currency}")
 with col2:
-    st.metric(label="1% Take Rate Revenue", value=f"{total_revenue:,} {active_pool.currency}")
+    st.metric(label=lang["metrics_revenue"], value=f"{total_revenue:,} {active_pool.currency}")
 with col3:
-    st.metric(label="Participants", value=f"{len(active_pool.users)} / {active_pool.total_months}")
+    st.metric(label=lang["metrics_active"], value=f"{len(active_pool.users)} / {active_pool.total_months}")
 with col4:
-    st.metric(label="Cycle Phase", value=f"Month {active_pool.current_month} of {active_pool.total_months}")
+    st.metric(label=lang["metrics_phase"], value=lang["phase_text"].format(month=active_pool.current_month, total=active_pool.total_months))
 
 st.write("---")
 
 left, right = st.columns([2, 1])
 
 with left:
-    st.subheader("👥 Room Participants (Live Cloud Data)")
+    st.subheader(lang["participants_title"])
     if not active_pool.users:
-        st.info(f"No users in '{active_pool.pool_id}' yet. Use the KYC panel on the left to add members.")
+        st.info(f"Henüz bu grupta katılımcı bulunmuyor. Sol taraftaki KYC panelinden yeni üye ekleyin.")
     else:
         user_list = []
         for u in active_pool.users:
-            kyc_status = "🛡️ VERIFIED" if u.passport_verified else "❌ FAILED"
-            payout_status = "🎁 Distributed" if u.has_received else "⏳ In Escrow Queue"
+            kyc_status = lang["kyc_verified"] if u.passport_verified else lang["kyc_failed"]
+            payout_status = lang["status_received"] if u.has_received else lang["status_waiting"]
             user_list.append({
-                "ID": u.user_id, "Member Name": u.name, "Region": u.country,
-                "KYC Registry": kyc_status, "Credit Rating": u.credit_score, "Status": payout_status
+                "Sıra": u.user_id, "Katılımcı Adı": u.name, "Bölge": u.country,
+                "KYC Durumu": kyc_status, "Kredi Skoru": u.credit_score, "Durum": payout_status
             })
         st.dataframe(pd.DataFrame(user_list), use_container_width=True, hide_index=True)
         
-        # Akıllı Sözleşme / Kura Tetikleme Tetikleyici Butonu
+        # Kura Çekme ve Dağıtım Tetikleyici Buton
         st.write("")
         if len(active_pool.users) < active_pool.total_months:
-            st.warning(f"Waiting for pool to fill. Need {active_pool.total_months - len(active_pool.users)} more members.")
+            needed = active_pool.total_months - len(active_pool.users)
+            st.warning(lang["wait_message"].format(count=needed))
         else:
-            if st.button("🔌 Release Monthly Escrow Funds & Draw Winner", type="primary", use_container_width=True):
+            if st.button(lang["btn_draw"], type="primary", use_container_width=True):
                 eligible = [u for u in active_pool.users if not u.has_received]
                 if not eligible:
-                    st.info("This pool's rotational cycle has fully completed!")
+                    st.info("Bu birikim döngüsü başarıyla tamamlanmıştır!")
                 else:
                     collected = 0
                     details = []
@@ -275,7 +356,7 @@ with left:
                         if u.credit_score >= 500:
                             details.append(f"✅ {u.name} deposited {active_pool.monthly_contribution:,} {active_pool.currency}")
                         else:
-                            details.append(f"🛡️ Escrow Insurance covered low-score user {u.name}")
+                            details.append(lang["insurance_covered"].format(name=u.name))
                     
                     fee = collected * 0.01
                     payout = collected - fee
@@ -291,22 +372,23 @@ with left:
                     active_pool.current_month += 1
                     for u in active_pool.users: u.has_paid = False
                     
-                    # Küresel veriyi güncelle ve buluta fırlat
+                    # Küresel veriyi güncelle ve buluta kaydet
                     pools_dict[selected_pool_id] = active_pool.to_dict()
                     global_state["pools"] = pools_dict
                     if save_global_state_to_db(global_state):
                         st.balloons()
-                        st.success(f"Success! {winner.name} won the draw and received {payout:,} {active_pool.currency}!")
+                        st.success(lang["won_message"].format(winner=winner.name, amount=payout, currency=active_pool.currency))
                         st.rerun()
 
 with right:
-    st.subheader("🛡️ Audit Trails (Escrow Ledger)")
+    st.subheader(lang["escrow_ledger"])
     if not active_pool.history:
-        st.info("No logs for this pool.")
+        st.info("Bu gruba ait henüz bir finansal hareket kaydedilmedi.")
     else:
         for event in reversed(active_pool.history):
-            with st.expander(f"📅 Cycle Month {event['month']} Audit"):
-                st.write(f"**Payout:** {event['payout']:,} {active_pool.currency}")
-                st.write(f"**Platform Fee:** {event['fee']:,} {active_pool.currency}")
+            with st.expander(f"📅 Döngü Ayı / Kabul Günü: {event['month']}"):
+                st.write(f"**Dağıtılan Birikim:** {event['payout']:,} {active_pool.currency}")
+                st.write(f"**Platform Komisyonu (%1):** {event['fee']:,} {active_pool.currency}")
+                st.write("**Güvenli Kasa Clearings:**")
                 for d in event['details']:
                     st.write(d)
