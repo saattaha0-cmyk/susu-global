@@ -12,12 +12,35 @@ SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 # ==========================================
+# AKILLI URL TEMİZLEYİCİ (URL CLEANER)
+# ==========================================
+def get_clean_base_url():
+    """Kullanıcının kopyaladığı URL'deki fazlalıkları (eğik çizgi veya /rest/v1) temizler."""
+    if not SUPABASE_URL:
+        return ""
+    
+    url = SUPABASE_URL.strip()
+    
+    # Eğer url sonunda eğik çizgi varsa temizle
+    if url.endswith("/"):
+        url = url[:-1]
+        
+    # Eğer kullanıcı adresi zaten /rest/v1 ile kopyaladıysa, o kısmı temizle (çift yazılmasın diye)
+    if "/rest/v1" in url:
+        url = url.replace("/rest/v1", "")
+        if url.endswith("/"):
+            url = url[:-1]
+            
+    return url
+
+# ==========================================
 # VERİTABANI BAĞLANTI FONKSİYONLARI (API)
 # ==========================================
 
 def load_state_from_db():
     """Supabase bulut veritabanından güncel durumu çeker."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    base_url = get_clean_base_url()
+    if not base_url or not SUPABASE_KEY:
         st.warning("⚠️ Streamlit Secrets ayarlarında SUPABASE_URL veya SUPABASE_KEY eksik!")
         return None
     
@@ -25,7 +48,8 @@ def load_state_from_db():
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
     }
-    url = f"{SUPABASE_URL}/rest/v1/susu_state?id=eq.US-GLOBAL-01"
+    # Temiz URL ile tam endpoint adresi oluşturuluyor
+    url = f"{base_url}/rest/v1/susu_state?id=eq.US-GLOBAL-01"
     
     try:
         response = requests.get(url, headers=headers)
@@ -34,13 +58,11 @@ def load_state_from_db():
             if rows:
                 return rows[0]["data"]
             else:
-                # Satır yoksa varsayılanı oluşturalım
                 st.info("ℹ️ Veritabanında başlangıç verisi bulunamadı, yeni oluşturuluyor...")
                 default_data = {"pool_id": "US-GLOBAL-01", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []}
                 save_state_to_db(default_data)
                 return default_data
         else:
-            # SESSİZ HATAYI BOZAN KISIM: Hatayı ekrana yazdırıyoruz
             st.error(f"❌ Veritabanı Bağlantı Hatası (Kod {response.status_code}): {response.text}")
     except Exception as e:
         st.error(f"❌ Veritabanı Bağlantı Hatası: {e}")
@@ -48,7 +70,8 @@ def load_state_from_db():
 
 def save_state_to_db(data_dict):
     """Supabase bulut veritabanına güncel durumu kaydeder."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    base_url = get_clean_base_url()
+    if not base_url or not SUPABASE_KEY:
         st.error("⚠️ Kaydedilemedi: API anahtarları eksik.")
         return False
     
@@ -58,7 +81,7 @@ def save_state_to_db(data_dict):
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates"
     }
-    url = f"{SUPABASE_URL}/rest/v1/susu_state"
+    url = f"{base_url}/rest/v1/susu_state"
     payload = {
         "id": "US-GLOBAL-01",
         "data": data_dict
@@ -120,11 +143,9 @@ class SusuPool:
         new_user = SusuUser(user_id, name, country, passport_ok, credit_score)
         self.users.append(new_user)
         
-        # Kaydetme başarılı oldu mu kontrol et
         if self.save_to_cloud():
             return True, f"User {name} successfully onboarded!"
         else:
-            # Hata varsa kullanıcıyı listeden geri çıkaralım ki kafa karışmasın
             self.users.pop()
             return False, "Database save failed. Please check the red error box above."
 
@@ -204,7 +225,6 @@ class SusuPool:
 # WEB PORTAL ARAYÜZÜ (STREAMLIT)
 # ==========================================
 
-# Bulut veritabanından veriyi yükle
 pool = SusuPool.load_from_cloud()
 if pool is None:
     pool = SusuPool(pool_id="US-GLOBAL-01", currency="USD", monthly_contribution=1000, total_months=4)
