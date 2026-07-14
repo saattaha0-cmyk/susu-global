@@ -150,7 +150,7 @@ with st.sidebar:
             new_curr = st.selectbox("Currency", ["TRY", "USD", "EUR", "GBP"])
             new_contrib = st.number_input("Monthly Contribution", min_value=10, value=5000, step=100)
             new_duration = st.slider("Total Months / Members", 3, 12, 4)
-            if st.button("🚀 Deploy to Cloud", use_container_width=True) and new_id and new_name:
+            if st.button("🚀 Deploy to Cloud", width="stretch" and new_id and new_name:
                 pools_dict[new_id] = {"pool_id": new_id, "pool_name": f"✨ {new_name} ({new_curr})", "currency": new_curr, "monthly_contribution": new_contrib, "total_months": new_duration, "current_month": 1, "users": [], "history": []}
                 global_state["pools"] = pools_dict; save_global_state_to_db(global_state); st.rerun()
 
@@ -199,7 +199,7 @@ with tab1:
                 with p_cols[idx]:
                     if u.has_paid: st.success(f"✓ {u.name.split()[0]} paid")
                     else:
-                        if st.button(f"Pay {u.name.split()[0]}", key=f"pay_{u.user_id}", use_container_width=True):
+                        if st.button(f"Pay {u.name.split()[0]}", key=f"pay_{u.user_id}", width="stretch":
                             u.has_paid = True; pools_dict[selected_pool_id] = active_pool.to_dict(); global_state["pools"] = pools_dict; save_global_state_to_db(global_state); st.rerun()
 
             st.write("---")
@@ -208,11 +208,11 @@ with tab1:
             else:
                 if any(not u.has_paid for u in active_pool.users):
                     st.error("🔒 Escrow Locked: All members must pay first.")
-                    if user_role == "Admin / Platform Owner" and st.button("⚡ Admin Auto-Pay All", use_container_width=True):
+                    if user_role == "Admin / Platform Owner" and st.button("⚡ Admin Auto-Pay All", width="stretch":
                         for u in active_pool.users: u.has_paid = True
                         pools_dict[selected_pool_id] = active_pool.to_dict(); global_state["pools"] = pools_dict; save_global_state_to_db(global_state); st.rerun()
                 else:
-                    if st.button(lang["btn_draw"], type="primary", use_container_width=True):
+                    if st.button(lang["btn_draw"], type="primary", width="stretch":
                         eligible = [u for u in active_pool.users if not u.has_received]
                         if not eligible: st.info("Cycle completed!")
                         else:
