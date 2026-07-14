@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import random
 import pandas as pd
-import requests  # Bulut veritabanına bağlanmak için standart kütüphane
+import requests
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Susu Global - Community Finance", page_icon="🌐", layout="wide")
@@ -18,14 +18,13 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 def load_state_from_db():
     """Supabase bulut veritabanından güncel durumu çeker."""
     if not SUPABASE_URL or not SUPABASE_KEY:
-        st.warning("⚠️ Supabase API keys are missing in Secrets. Running in offline/temporary mode.")
+        st.warning("⚠️ Streamlit Secrets ayarlarında SUPABASE_URL veya SUPABASE_KEY eksik!")
         return None
     
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
     }
-    # Belirlediğimiz tablodan veriyi çekiyoruz
     url = f"{SUPABASE_URL}/rest/v1/susu_state?id=eq.US-GLOBAL-01"
     
     try:
@@ -34,20 +33,30 @@ def load_state_from_db():
             rows = response.json()
             if rows:
                 return rows[0]["data"]
+            else:
+                # Satır yoksa varsayılanı oluşturalım
+                st.info("ℹ️ Veritabanında başlangıç verisi bulunamadı, yeni oluşturuluyor...")
+                default_data = {"pool_id": "US-GLOBAL-01", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "users": [], "history": []}
+                save_state_to_db(default_data)
+                return default_data
+        else:
+            # SESSİZ HATAYI BOZAN KISIM: Hatayı ekrana yazdırıyoruz
+            st.error(f"❌ Veritabanı Bağlantı Hatası (Kod {response.status_code}): {response.text}")
     except Exception as e:
-        st.error(f"Database Connection Error: {e}")
+        st.error(f"❌ Veritabanı Bağlantı Hatası: {e}")
     return None
 
 def save_state_to_db(data_dict):
-    """Supabase bulut veritabanına güncel durumu kaydeder (Upsert)."""
+    """Supabase bulut veritabanına güncel durumu kaydeder."""
     if not SUPABASE_URL or not SUPABASE_KEY:
+        st.error("⚠️ Kaydedilemedi: API anahtarları eksik.")
         return False
     
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates"  # Varsa güncelle, yoksa yeni ekle (Upsert)
+        "Prefer": "resolution=merge-duplicates"
     }
     url = f"{SUPABASE_URL}/rest/v1/susu_state"
     payload = {
@@ -56,11 +65,14 @@ def save_state_to_db(data_dict):
     }
     
     try:
-        # Supabase API bizden liste (array) bekler
         response = requests.post(url, headers=headers, json=[payload])
-        return response.status_code in [200, 201]
+        if response.status_code in [200, 201]:
+            return True
+        else:
+            st.error(f"❌ Veri Kaydetme Hatası (Kod {response.status_code}): {response.text}")
+            return False
     except Exception as e:
-        st.error(f"Database Save Error: {e}")
+        st.error(f"❌ Veri Kaydetme Hatası: {e}")
         return False
 
 # ==========================================
@@ -107,8 +119,14 @@ class SusuPool:
         
         new_user = SusuUser(user_id, name, country, passport_ok, credit_score)
         self.users.append(new_user)
-        self.save_to_cloud()
-        return True, f"User {name} successfully onboarded (KYC Status: {'PASSED' if passport_ok else 'FAILED'})"
+        
+        # Kaydetme başarılı oldu mu kontrol et
+        if self.save_to_cloud():
+            return True, f"User {name} successfully onboarded!"
+        else:
+            # Hata varsa kullanıcıyı listeden geri çıkaralım ki kafa karışmasın
+            self.users.pop()
+            return False, "Database save failed. Please check the red error box above."
 
     def run_cycle(self):
         eligible = [u for u in self.users if not u.has_received]
@@ -117,7 +135,7 @@ class SusuPool:
 
         total_collected = 0
         details = []
-        fee_rate = 0.01  # %1 platform komisyonu
+        fee_rate = 0.01
         
         for u in self.users:
             u.has_paid = True
@@ -146,8 +164,9 @@ class SusuPool:
         for u in self.users:
             u.has_paid = False
             
-        self.save_to_cloud()
-        return True, f"{winner.name} received {payout_amount:,} {self.currency} (Platform Fee: {platform_fee:,} {self.currency})"
+        if self.save_to_cloud():
+            return True, f"{winner.name} received {payout_amount:,} {self.currency}"
+        return False, "Failed to save cycle to cloud database."
 
     def to_dict_for_db(self):
         return {
@@ -161,7 +180,7 @@ class SusuPool:
         }
 
     def save_to_cloud(self):
-        save_state_to_db(self.to_dict_for_db())
+        return save_state_to_db(self.to_dict_for_db())
 
     @classmethod
     def load_from_cloud(cls):
@@ -185,7 +204,7 @@ class SusuPool:
 # WEB PORTAL ARAYÜZÜ (STREAMLIT)
 # ==========================================
 
-# Bulut veritabanından veriyi yükle, yoksa çevrimdışı şablonu kullan
+# Bulut veritabanından veriyi yükle
 pool = SusuPool.load_from_cloud()
 if pool is None:
     pool = SusuPool(pool_id="US-GLOBAL-01", currency="USD", monthly_contribution=1000, total_months=4)
@@ -215,7 +234,6 @@ with st.sidebar:
                 
     st.write("---")
     if st.button("🚨 Reset Cloud Database", use_container_width=True):
-        # Veritabanını varsayılan başlangıç durumuna sıfırlar
         default_state = {
             "pool_id": "US-GLOBAL-01",
             "currency": "USD",
@@ -272,7 +290,6 @@ with left:
             })
         st.dataframe(pd.DataFrame(user_list), use_container_width=True, hide_index=True)
         
-        # Döngüyü Çalıştır
         st.write("")
         if len(pool.users) < pool.total_months:
             st.warning(f"Waiting for pool to fill. Need {pool.total_months - len(pool.users)} more verified user(s) to start the smart escrow contract.")
@@ -284,7 +301,7 @@ with left:
                     st.success(msg)
                     st.rerun()
                 else:
-                    st.info(msg)
+                    st.error(msg)
 
 with right:
     st.subheader("🛡️ Escrow Ledger (Live Audit)")
