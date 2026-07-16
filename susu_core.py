@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import time
 
 # --- 1. AYARLAR VE URL GÜVENLİK KİLİDİ ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip('/')
@@ -8,7 +9,7 @@ HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
 
 st.title("Susu Global - FinTech Platform")
 
-# --- 2. GÜVEN KARNESİ (RISK MOTORU) ---
+# --- 2. GÜVEN KARNESİ (RİSK MOTORU) ---
 st.subheader("Güven Karnem")
 try:
     res_score = requests.get(f"{SUPABASE_URL}/rest/v1/users?id=eq.9741f74f-c083-4832-b54b-4662cd8b0cc8", headers=HEADERS)
@@ -21,27 +22,37 @@ try:
 except Exception as e:
     st.error("API Bağlantı Hatası: Güven motoru yanıt vermiyor.")
 
-# --- 3. RİSK YÖNETİMİ VE ÖDEME SİMÜLASYONU ---
-st.write("---")
-st.write("⚖️ **Yönetici Paneli: Ödeme Simülasyonu** (Yatırımcı Testi İçin)")
-col1, col2 = st.columns(2)
+# --- 3. YÖNETİCİ PANELİ: RİSK VE AĞ SİMÜLASYONU ---
+st.divider()
+st.subheader("⚙️ Sistem Motoru Test Paneli")
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    if st.button("✅ Zamanında Ödedi (+10 Puan)"):
+    if st.button("✅ Ödül (+10 Puan)"):
         payload = {"target_user_id": "9741f74f-c083-4832-b54b-4662cd8b0cc8", "change_amount": 10}
         requests.post(f"{SUPABASE_URL}/rest/v1/rpc/update_trust_score", headers=HEADERS, json=payload)
-        st.success("Ödül verildi, güven skoru arttı!")
         st.rerun()
 
 with col2:
-    if st.button("❌ Ödemeyi Geciktirdi (-20 Puan)"):
+    if st.button("❌ Ceza (-20 Puan)"):
         payload = {"target_user_id": "9741f74f-c083-4832-b54b-4662cd8b0cc8", "change_amount": -20}
         requests.post(f"{SUPABASE_URL}/rest/v1/rpc/update_trust_score", headers=HEADERS, json=payload)
-        st.warning("Ceza kesildi, güven skoru düştü!")
         st.rerun()
 
+with col3:
+    if st.button("👥 Havuza 5 Kullanıcı Ekle"):
+        bot_ids = ["Yatirimci-A", "Yatirimci-B", "Yatirimci-C", "Yatirimci-D", "Yatirimci-E"]
+        for bot in bot_ids:
+            bot_data = {
+                "user_id": bot,
+                "transaction_type": "HAVUZ_KATILIM",
+                "amount": 20000
+            }
+            requests.post(f"{SUPABASE_URL}/rest/v1/ledger", headers=HEADERS, json=bot_data)
+        st.success("Ağ hacmi büyüdü! Havuza 5 yeni yatırımcı girdi.")
+
 # --- 4. HAVUZLAR VE KATILIM ---
-st.write("---")
+st.divider()
 st.subheader("Aktif Havuzlar")
 try:
     res_pools = requests.get(f"{SUPABASE_URL}/rest/v1/pools", headers=HEADERS)
@@ -61,29 +72,30 @@ except:
     st.warning("Havuzlar yüklenemedi. URL veya bağlantı kontrol edilmeli.")
 
 # --- 5. AKILLI KURA VE ÖDEME MOTORU ---
-st.write("---")
-st.subheader("🎲 Otonom Kura ve Dağıtım Motoru")
+st.divider()
+st.subheader("🎲 Otonom Kura Motoru")
 if st.button("Kura Çekilişini Başlat"):
-    res_draw = requests.post(f"{SUPABASE_URL}/rest/v1/rpc/run_draw", headers=HEADERS, json={"target_pool_id": 1})
-    
-    if res_draw.status_code == 200 and res_draw.json():
-        kazanan_id = res_draw.json()[0]['winner_user_id']
-        st.balloons()
-        st.success("Kura başarıyla çekildi!")
+    with st.spinner("Şifreli algoritmalarla rastgele kazanan belirleniyor..."):
+        time.sleep(1.5) # Gerçekçilik katmak için kısa bir bekleme efekti
+        res_draw = requests.post(f"{SUPABASE_URL}/rest/v1/rpc/run_draw", headers=HEADERS, json={"target_pool_id": 1})
         
-        odeme_data = {
-            "user_id": kazanan_id,
-            "transaction_type": "KURA_KAZANCI",
-            "amount": 100000
-        }
-        requests.post(f"{SUPABASE_URL}/rest/v1/ledger", headers=HEADERS, json=odeme_data)
-        st.info("Kazanılan tutar başarıyla kullanıcının hesabına aktarıldı.")
-    else:
-        st.error("Kura motoru çalışamadı (Yeterli katılımcı olmayabilir).")
+        if res_draw.status_code == 200 and res_draw.json():
+            kazanan_id = res_draw.json()[0]['winner_user_id']
+            st.balloons()
+            st.success(f"Kura başarıyla çekildi! Kazanan: **{kazanan_id}**")
+            
+            odeme_data = {
+                "user_id": kazanan_id,
+                "transaction_type": "KURA_KAZANCI",
+                "amount": 120000 # 6 kişi * 20.000 TL
+            }
+            requests.post(f"{SUPABASE_URL}/rest/v1/ledger", headers=HEADERS, json=odeme_data)
+        else:
+            st.error("Kura motoru çalışamadı.")
 
 # --- 6. İŞLEM GEÇMİŞİ (LEDGER) ---
-st.write("---")
-st.subheader("İşlem Geçmişim")
+st.divider()
+st.subheader("İşlem Geçmişim (Şeffaflık Defteri)")
 try:
     res_ledger = requests.get(f"{SUPABASE_URL}/rest/v1/ledger?user_id=eq.9741f74f-c083-4832-b54b-4662cd8b0cc8", headers=HEADERS)
     if res_ledger.status_code == 200:
