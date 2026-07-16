@@ -20,7 +20,7 @@ try:
     else:
         st.write("Güven karnesi verisi şu an çekilemiyor.")
 except Exception as e:
-    st.error("API Bağlantı Hatası: Güven motoru yanıt vermiyor.")
+    st.error(f"API Bağlantı Hatası: Güven motoru yanıt vermiyor. Detay: {e}")
 
 # --- 3. YÖNETİCİ PANELİ: RİSK VE AĞ SİMÜLASYONU ---
 st.divider()
@@ -41,7 +41,14 @@ with col2:
 
 with col3:
     if st.button("👥 Havuza 5 Kullanıcı Ekle"):
-        bot_ids = ["Yatirimci-A", "Yatirimci-B", "Yatirimci-C", "Yatirimci-D", "Yatirimci-E"]
+        # Veritabanının reddetmemesi için geçerli UUID formatları kullanıyoruz
+        bot_ids = [
+            "11111111-1111-1111-1111-111111111111",
+            "22222222-2222-2222-2222-222222222222",
+            "33333333-3333-3333-3333-333333333333",
+            "44444444-4444-4444-4444-444444444444",
+            "55555555-5555-5555-5555-555555555555"
+        ]
         for bot in bot_ids:
             bot_data = {
                 "user_id": bot,
@@ -49,7 +56,7 @@ with col3:
                 "amount": 20000
             }
             requests.post(f"{SUPABASE_URL}/rest/v1/ledger", headers=HEADERS, json=bot_data)
-        st.success("Ağ hacmi büyüdü! Havuza 5 yeni yatırımcı girdi.")
+        st.success("Ağ hacmi büyüdü! Havuza 5 yeni simülasyon yatırımcısı girdi.")
 
 # --- 4. HAVUZLAR VE KATILIM ---
 st.divider()
@@ -68,7 +75,8 @@ try:
             requests.post(f"{SUPABASE_URL}/rest/v1/ledger", headers=HEADERS, json=katilim_data)
             st.success("İşlem başarıyla kaydedildi!")
             st.rerun()
-except:
+# "Exception as e" diyerek sayfa yenileme komutunun hataya düşmesini engelledik.
+except Exception as e:
     st.warning("Havuzlar yüklenemedi. URL veya bağlantı kontrol edilmeli.")
 
 # --- 5. AKILLI KURA VE ÖDEME MOTORU ---
@@ -76,7 +84,7 @@ st.divider()
 st.subheader("🎲 Otonom Kura Motoru")
 if st.button("Kura Çekilişini Başlat"):
     with st.spinner("Şifreli algoritmalarla rastgele kazanan belirleniyor..."):
-        time.sleep(1.5) # Gerçekçilik katmak için kısa bir bekleme efekti
+        time.sleep(1.5) 
         res_draw = requests.post(f"{SUPABASE_URL}/rest/v1/rpc/run_draw", headers=HEADERS, json={"target_pool_id": 1})
         
         if res_draw.status_code == 200 and res_draw.json():
@@ -87,11 +95,12 @@ if st.button("Kura Çekilişini Başlat"):
             odeme_data = {
                 "user_id": kazanan_id,
                 "transaction_type": "KURA_KAZANCI",
-                "amount": 120000 # 6 kişi * 20.000 TL
+                "amount": 120000 
             }
             requests.post(f"{SUPABASE_URL}/rest/v1/ledger", headers=HEADERS, json=odeme_data)
         else:
-            st.error("Kura motoru çalışamadı.")
+            # Artık motor çalışmazsa tam olarak neden çalışmadığını ekrana basacak.
+            st.error(f"Kura motoru çalışamadı. Veritabanı Yanıtı: {res_draw.text}")
 
 # --- 6. İŞLEM GEÇMİŞİ (LEDGER) ---
 st.divider()
@@ -105,5 +114,5 @@ try:
                 st.write(f"- {tx['transaction_type']}: **{tx['amount']} TL**")
         else:
             st.write("Henüz bir işlem hareketin yok.")
-except:
+except Exception as e:
     st.write("İşlem geçmişi bağlantısında sorun yaşandı.")
