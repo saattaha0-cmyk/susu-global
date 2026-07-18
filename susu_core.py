@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 import time
 import plotly.graph_objects as go
+import yfinance as yf
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Susu Global | Enterprise WealthTech", page_icon="🏦", layout="wide", initial_sidebar_state="expanded")
@@ -31,6 +32,29 @@ def get_clean_base_url():
     if url.endswith("/"): url = url[:-1]
     if "/rest/v1" in url: url = url.replace("/rest/v1", ""); url = url.rstrip("/")
     return url
+
+# ==========================================
+# 📡 CANLI PİYASA VERİSİ (YFINANCE API)
+# ==========================================
+@st.cache_data(ttl=300) # Veriyi 5 dakikada bir çeker (API'yi yormamak için)
+def get_live_market_data():
+    rates = {"BTC": {"price": 0, "change": 0}, "GOLD": {"price": 0, "change": 0}, "ETF": {"price": 0, "change": 0}}
+    try:
+        # BTC-USD (Kripto), GC=F (Altın Vadeli), SCHD (US Temettü ETF)
+        assets = {"BTC-USD": "BTC", "GC=F": "GOLD", "SCHD": "ETF"}
+        for symbol, name in assets.items():
+            tk = yf.Ticker(symbol)
+            hist = tk.history(period="5d") # Son 5 günlük temel fiyat hareketi
+            if len(hist) >= 2:
+                current = float(hist['Close'].iloc[-1])
+                prev = float(hist['Close'].iloc[0])
+                pct_change = (current - prev) / prev
+                rates[name] = {"price": current, "change": pct_change}
+    except Exception as e:
+        pass # Hata olursa varsayılan sıfırlar kalır
+    return rates
+
+live_market = get_live_market_data()
 
 # ==========================================
 # 🌍 VERİ TABANI & MODELLER
@@ -63,7 +87,7 @@ global_state = load_global_state_from_db()
 if not global_state: global_state = {"pools": {}}
 pools_dict = global_state["pools"]
 
-# Eski veritabanı kayıtları için strateji yamasını ekle
+# Strateji yamasını güvenceye al
 for p_id in pools_dict:
     if "strategy" not in pools_dict[p_id]: pools_dict[p_id]["strategy"] = "🤖 Smart Yield (Otomatik)"
 
@@ -73,7 +97,7 @@ for p_id in pools_dict:
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=50)
     st.markdown("### Susu Global")
-    st.caption("WealthTech OS | v12.0 Smart Yield")
+    st.caption("WealthTech OS | v13.0 Live API")
     st.divider()
     
     selected_pool_id = st.selectbox("📂 Aktif Portföy", options=list(pools_dict.keys()), format_func=lambda x: pools_dict[x]["pool_name"])
@@ -83,7 +107,6 @@ with st.sidebar:
     total_months = p_data["total_months"]
     is_completed = current_month > total_months
 
-    # YENİ EKLENEN: STRATEJİ SEÇİMİ
     st.markdown("#### ⚙️ Portföy Stratejisi")
     strategies = ["🤖 Smart Yield (Otomatik)", "🌙 Katılım (Altın Endeksli)", "🏦 Geleneksel (US ETF)", "⚡ Yüksek Risk (Bitcoin)"]
     current_strat_idx = strategies.index(p_data["strategy"]) if p_data["strategy"] in strategies else 0
@@ -109,10 +132,17 @@ with st.sidebar:
 # 🌐 ÜST BAR: CANLI PİYASA TERMİNALİ
 # ==========================================
 t1, t2, t3, t4 = st.columns(4)
-with t1: st.metric("BTC/USD", "64,230.50", "1.2%", delta_color="normal")
-with t2: st.metric("XAU/USD (Altın)", "2,340.10", "0.4%", delta_color="normal")
-with t3: st.metric("US ETF Yield", "4.85%", "Yıllık", delta_color="off")
-with t4: st.metric("Aktif Strateji", p_data["strategy"].split(" ")[1], p_data["strategy"].split(" ")[0], delta_color="off")
+with t1: 
+    btc_color = "normal" if live_market['BTC']['change'] >= 0 else "inverse"
+    st.metric("BTC/USD", f"${live_market['BTC']['price']:,.2f}", f"{live_market['BTC']['change']*100:.2f}%", delta_color=btc_color)
+with t2: 
+    gold_color = "normal" if live_market['GOLD']['change'] >= 0 else "inverse"
+    st.metric("XAU/USD (Altın)", f"${live_market['GOLD']['price']:,.2f}", f"{live_market['GOLD']['change']*100:.2f}%", delta_color=gold_color)
+with t3: 
+    etf_color = "normal" if live_market['ETF']['change'] >= 0 else "inverse"
+    st.metric("US Dividend ETF (SCHD)", f"${live_market['ETF']['price']:,.2f}", f"{live_market['ETF']['change']*100:.2f}%", delta_color=etf_color)
+with t4: 
+    st.metric("Aktif Strateji", p_data["strategy"].split(" ")[1], p_data["strategy"].split(" ")[0], delta_color="off")
 st.divider()
 
 # ==========================================
@@ -124,24 +154,22 @@ with col_status:
     if is_completed: st.success("✅ Döngü Tamamlandı")
     else: st.info(f"⏳ Döngü {current_month} / {total_months}")
 
-# Ana Metrikler
 with st.container(border=True):
     mc1, mc2, mc3, mc4 = st.columns(4)
     with mc1: st.metric("Aylık Katılım", f"{p_data['monthly_contribution']:,} USD")
-    with mc2: st.metric("Kümülatif Getiri", f"+{p_data.get('total_yield', 0):,.2f} USD")
+    with mc2: st.metric("Kümülatif Getiri", f"{p_data.get('total_yield', 0):+,.2f} USD")
     with mc3: st.metric("Havuz Kapasitesi", f"{len(active_users)} / {total_months} Kişi")
     with mc4: st.metric("Susu Trust Score", f"{int(sum(u.trust_score for u in active_users)/len(active_users)) if active_users else 0} ⭐")
 
-tab1, tab2 = st.tabs(["⚡ Akıllı Sözleşme (Operasyon)", "🚀 Getiri Grafiği"])
+tab1, tab2 = st.tabs(["⚡ Akıllı Sözleşme (Operasyon)", "🚀 Canlı Getiri Grafiği"])
 
 with tab1:
     col_left, col_right = st.columns([6, 4])
-    
     with col_left:
         st.markdown("### 👥 Tahsilat & Dağıtım Motoru")
         if not active_users: st.warning("Havuz boş. Sol menüden müşteri ekleyin.")
         else:
-            df = pd.DataFrame([{"Müşteri": u.name, "Bölge": u.country, "Trust Score": f"{u.trust_score}", "Ödeme": "✅" if u.has_paid else "⏳", "Durum": "🏦 Kazandı" if u.has_received else "Bekliyor"} for u in active_users])
+            df = pd.DataFrame([{"Müşteri": u.name, "Bölge": u.country, "Ödeme": "✅" if u.has_paid else "⏳", "Durum": "🏦 Kazandı" if u.has_received else "Bekliyor"} for u in active_users])
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             if not is_completed:
@@ -154,28 +182,31 @@ with tab1:
                                 if st.button(f"Tahsil Et:\n{u.name}", key=f"pay_{u.user_id}", use_container_width=True):
                                     p_data["users"][idx]["has_paid"] = True; save_global_state_to_db(global_state); st.rerun()
 
-                # DİNAMİK GETİRİ MOTORU (YENİ)
+                # GERÇEK ZAMANLI DAĞITIM MOTORU
                 if len(active_users) >= total_months and all(u.has_paid for u in active_users):
-                    st.info(f"ℹ️ Fonlar {p_data['strategy']} rotasına aktarıldı.")
-                    if st.button("🚀 PİYASA GETİRİSİNİ HESAPLA VE DAĞIT", type="primary", use_container_width=True):
+                    st.info(f"ℹ️ Fonlar gerçek zamanlı {p_data['strategy']} piyasasına aktarıldı.")
+                    if st.button("🚀 CANLI PİYASA GETİRİSİNİ HESAPLA VE DAĞIT", type="primary", use_container_width=True):
                         eligible_indices = [i for i, u in enumerate(active_users) if not u.has_received]
                         if eligible_indices:
-                            with st.spinner(f"Optimizasyon yapılıyor: {p_data['strategy']}..."):
+                            with st.spinner("Borsalardan anlık API verisi çekiliyor..."):
                                 time.sleep(1.5)
                                 collected = p_data["monthly_contribution"] * total_months
                                 
-                                # Stratejiye göre getiri hesaplama kurgusu
-                                strat = p_data["strategy"]
-                                rate_gold = random.uniform(0.005, 0.015)
-                                rate_etf = random.uniform(0.01, 0.02)
-                                rate_btc = random.uniform(-0.02, 0.05) # BTC zarar da ettirebilir
+                                # Canlı API'den gelen verileri kullan
+                                rate_gold = live_market['GOLD']['change']
+                                rate_etf = live_market['ETF']['change']
+                                rate_btc = live_market['BTC']['change']
                                 
-                                if "Katılım" in strat: final_rate = rate_gold; detail = "Fiziksel Altın bazlı değer artışı"
-                                elif "Geleneksel" in strat: final_rate = rate_etf; detail = "US Temettü ETF getirisi"
-                                elif "Yüksek Risk" in strat: final_rate = rate_btc; detail = "Bitcoin Day-Trade kar/zararı"
-                                else: # Smart Yield
-                                    final_rate = max(rate_gold, rate_etf, rate_btc)
-                                    detail = f"Smart Yield Optimizasyonu (Kullanılan Oran: %{final_rate*100:.2f})"
+                                strat = p_data["strategy"]
+                                if "Katılım" in strat: 
+                                    final_rate = rate_gold; detail = f"XAU Canlı Verisi (%{final_rate*100:.2f})"
+                                elif "Geleneksel" in strat: 
+                                    final_rate = rate_etf; detail = f"SCHD Canlı ETF Verisi (%{final_rate*100:.2f})"
+                                elif "Yüksek Risk" in strat: 
+                                    final_rate = rate_btc; detail = f"BTC/USD Canlı Verisi (%{final_rate*100:.2f})"
+                                else: # Smart Yield (En Yüksek Getiriyi Bulan Algoritma)
+                                    best_asset, final_rate = max([("Altın", rate_gold), ("US ETF", rate_etf), ("Bitcoin", rate_btc)], key=lambda x: x[1])
+                                    detail = f"Smart Optimizasyon: {best_asset} Seçildi (%{final_rate*100:.2f})"
 
                                 generated_yield = collected * final_rate
                                 p_data["total_yield"] = p_data.get("total_yield", 0) + generated_yield
@@ -198,20 +229,20 @@ with tab1:
             for event in reversed(p_data["history"]):
                 st.markdown(f"**Döngü {event['month']}** | Kazanan: **{event['winner']}**")
                 color = "green" if event.get('yield', 0) >= 0 else "red"
-                st.markdown(f"Ana Para: **{event['payout']:,}** USD <br> Temettü: <span style='color:{color};'>**{event.get('yield', 0):,.2f}** USD</span>", unsafe_allow_html=True)
-                st.caption(f"⚙️ {event.get('strat_detail', '')}")
+                st.markdown(f"Ana Para: **{event['payout']:,}** USD <br> Temettü: <span style='color:{color};'>**{event.get('yield', 0):+,.2f}** USD</span>", unsafe_allow_html=True)
+                st.caption(f"📡 API: {event.get('strat_detail', '')}")
                 st.divider()
 
 with tab2:
-    st.markdown("### 📈 Strateji Performans Analizi")
+    st.markdown("### 📈 Gerçekleşen API Getiri Analizi")
     if p_data["history"]:
         months = [f"Döngü {h['month']}" for h in p_data["history"]]
         yields = [h.get("yield", 0) for h in p_data["history"]]
         
         fig = go.Figure()
         colors = ['#ef4444' if y < 0 else '#10b981' for y in yields]
-        fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors, name="Döngüsel Getiri/Zarar"))
-        fig.update_layout(title=f"Uygulanan Strateji: {p_data['strategy']}", xaxis_title="Zaman Çizelgesi", yaxis_title="Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)')
+        fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors, name="Döngüsel API Getiri/Zararı"))
+        fig.update_layout(title=f"Kullanılan API Stratejisi: {p_data['strategy']}", xaxis_title="Zaman Çizelgesi", yaxis_title="Net Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Veri oluşması için kura çekimi yapılmalıdır.")
+        st.info("Canlı piyasa verileri ile kura çekimi yapılmalıdır.")
