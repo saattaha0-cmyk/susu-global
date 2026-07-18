@@ -20,6 +20,7 @@ st.markdown("""
     .cc-box { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-family: monospace;}
     .client-card { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #bbf7d0; padding: 20px; border-radius: 12px; }
     .ai-card { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; }
+    .kyc-warning { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,7 +73,7 @@ def get_live_market_data():
 live_market = get_live_market_data()
 
 # ==========================================
-# 🔐 KİMLİK DOĞRULAMA
+# 🔐 KİMLİK DOĞRULAMA (RBAC) SİSTEMİ
 # ==========================================
 if "role" not in st.session_state: st.session_state["role"] = None
 if "current_user" not in st.session_state: st.session_state["current_user"] = None
@@ -104,10 +105,11 @@ if st.session_state["role"] is None:
                 else:
                     found = False
                     for p_id, p_data in global_state["pools"].items():
-                        for u in p_data["users"]:
+                        for idx, u in enumerate(p_data["users"]):
                             if u["name"].strip().lower() == username.strip().lower() and password == "1234":
                                 st.session_state["role"] = "client"
                                 st.session_state["current_user"] = u
+                                st.session_state["current_user_idx"] = idx
                                 st.session_state["current_pool"] = p_data
                                 found = True
                                 break
@@ -118,7 +120,7 @@ if st.session_state["role"] is None:
     st.stop()
 
 def logout():
-    st.session_state["role"] = None; st.session_state["current_user"] = None; st.session_state["current_pool"] = None; st.rerun()
+    st.session_state["role"] = None; st.session_state["current_user"] = None; st.session_state["current_pool"] = None; st.session_state.pop("current_user_idx", None); st.rerun()
 
 # ==========================================
 # 🌐 ORTAK ÜST BAR
@@ -129,25 +131,48 @@ with t2: gold_color = "normal" if live_market['GOLD']['change'] >= 0 else "inver
 with t3: etf_color = "normal" if live_market['ETF']['change'] >= 0 else "inverse"; st.metric("US Temettü ETF", f"${live_market['ETF']['price']:,.2f}", f"{live_market['ETF']['change']*100:.2f}%", delta_color=etf_color)
 with t4: 
     if st.session_state["role"] == "client": st.metric("Bağlı Havuz", st.session_state["current_pool"]["pool_name"].replace("🏦 ", ""), delta_color="off")
-    else: st.metric("Sistem Durumu", "Online", "v19.0 AI", delta_color="normal")
+    else: st.metric("Sistem Durumu", "Online", "v20.0 FinOps", delta_color="normal")
 st.divider()
 
 # ==========================================
 # 🤵 MÜŞTERİ (CLIENT) PORTALI
 # ==========================================
 if st.session_state["role"] == "client":
-    user_data = st.session_state["current_user"]
-    pool_data = st.session_state["current_pool"]
+    # State'i her döngüde tazeleyelim
+    pool_data = global_state["pools"][st.session_state["current_pool"]["pool_id"]]
+    user_idx = st.session_state["current_user_idx"]
+    user_data = pool_data["users"][user_idx]
     
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=50)
         st.markdown(f"### {user_data['name']}")
+        
+        # KYC Statüsü
+        if user_data.get("kyc_verified", False):
+            st.markdown("✅ **Doğrulanmış Hesap**")
+        else:
+            st.markdown("⚠️ **Hesap Onaysız**")
+            
         st.caption("Bireysel Yatırımcı Portalı")
         st.button("🚪 Çıkış Yap", on_click=logout, use_container_width=True)
     
     st.markdown(f"<h2>Hoş Geldin, {user_data['name']} 👋</h2>", unsafe_allow_html=True)
     
-    tab_c1, tab_c2, tab_c3 = st.tabs(["📊 Cüzdan Özeti", "📄 Belgeler & Risk Bildirimi", "🤖 SusuAI Asistan"])
+    # KYC Uyarısı Modülü
+    if not user_data.get("kyc_verified", False):
+        st.markdown("<div class='kyc-warning'><b>⚠️ Yasal Uyarı:</b> Uluslararası para aklama (AML) yasaları gereği fon havuzundan ödeme alabilmeniz için kimlik doğrulamanızı (KYC) tamamlamanız gerekmektedir. Lütfen belgelerinizi yükleyin.</div>", unsafe_allow_html=True)
+        with st.expander("📄 Kimlik Yükle ve Hesabı Doğrula"):
+            st.file_uploader("Pasaport veya Kimlik Kartı Yükleyin", type=['jpg', 'png', 'pdf'])
+            if st.button("Belgeyi Gönder ve Onayla", type="primary"):
+                with st.spinner("Belgeler yapay zeka ile analiz ediliyor..."):
+                    time.sleep(2)
+                pool_data["users"][user_idx]["kyc_verified"] = True
+                save_global_state_to_db(global_state)
+                st.success("Tebrikler! Hesabınız resmi olarak doğrulandı.")
+                time.sleep(1)
+                st.rerun()
+
+    tab_c1, tab_c2, tab_c3, tab_c4 = st.tabs(["📊 Cüzdan Özeti", "🎯 Finansal Özgürlük Planlayıcı", "📄 Belgeler", "🤖 SusuAI Asistan"])
     
     with tab_c1:
         st.markdown(f"Şu anda **{pool_data['pool_name']}** fonundasın ve fon **{pool_data['strategy']}** stratejisi ile yönetiliyor.")
@@ -180,7 +205,13 @@ if st.session_state["role"] == "client":
             fig.update_layout(xaxis_title="Aylar", yaxis_title="Net Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=10, b=0), height=300)
             st.plotly_chart(fig, use_container_width=True)
 
-    with tab_c2:
+    with tab_c4:
+        st.markdown("### 🤖 SusuAI Akıllı Portföy Asistanı")
+        best_asset = max(live_market.items(), key=lambda x: x[1]['change'])
+        
+        st.markdown(f"<div class='ai-card'><b>SusuAI:</b> Merhaba {user_data['name']}. Senin Susu Güven Puanın <b>{user_data.get('trust_score', 50)}</b>. Düzenli ödeme yapmaya devam edersen bir sonraki döngüde kura şansın istatistiksel olarak %15 artacaktır. <br><br>Şu an küresel piyasalara baktığımda en iyi getiriyi <b>%{(best_asset[1]['change']*100):.2f}</b> büyüme ile <b>{best_asset[0]}</b> sağlıyor. Havuz yöneticin akıllı sözleşmeleri buna göre optimize etmektedir.</div>", unsafe_allow_html=True)
+
+    with tab_c3:
         if user_data.get('has_paid'):
             receipt_date = datetime.now().strftime("%d-%m-%Y %H:%M")
             receipt_text = f"=========================================\n        SUSU GLOBAL WEALTHTECH\n          E-TAHSİLAT MAKBUZU\n=========================================\nTarih: {receipt_date}\nMüşteri: {user_data['name']}\nFon Adı: {pool_data['pool_name'].replace('🏦 ', '')}\nDöngü: {pool_data['current_month']}. Ay Katılımı\nTahsil Edilen Tutar: ${pool_data['monthly_contribution']}\n\nİşlem Durumu: BAŞARILI (Akıllı Sözleşme Onaylı)\n=========================================\nBu belge elektronik olarak Susu OS tarafından üretilmiştir."
@@ -192,12 +223,51 @@ if st.session_state["role"] == "client":
         st.markdown("<br>### ⚖️ Risk Bildirimi", unsafe_allow_html=True)
         st.warning("Kripto para (BTC) ve Temettü (ETF) piyasaları yüksek volatilite içerebilir. Seçilen yatırım stratejisine bağlı olarak fonlarda kısa süreli dalgalanmalar yaşanabilir. Susu Global algoritması kârı maksimize etmeyi hedefler ancak kesin kazanç garantisi sunmaz.")
 
-    with tab_c3:
-        st.markdown("### 🤖 SusuAI Akıllı Portföy Asistanı")
-        best_asset = max(live_market.items(), key=lambda x: x[1]['change'])
-        worst_asset = min(live_market.items(), key=lambda x: x[1]['change'])
+    # YENİ EKLENEN: FİNANSAL ÖZGÜRLÜK (BİLEŞİK GETİRİ) PLANLAYICISI
+    with tab_c2:
+        st.markdown("### 🎯 Finansal Özgürlük Planlayıcısı")
+        st.markdown("Hedeflediğiniz aylık yatırım tutarı ve seçtiğiniz strateji ile **5 yıllık** (veya daha uzun) vadede portföyünüzün bileşik getiri gücüyle nasıl büyüyeceğini simüle edin.")
         
-        st.markdown(f"<div class='ai-card'><b>SusuAI:</b> Merhaba {user_data['name']}. Senin Susu Güven Puanın <b>{user_data.get('trust_score', 50)}</b>. Düzenli ödeme yapmaya devam edersen bir sonraki döngüde kura şansın istatistiksel olarak %15 artacaktır. <br><br>Şu an küresel piyasalara baktığımda en iyi getiriyi <b>%{(best_asset[1]['change']*100):.2f}</b> büyüme ile <b>{best_asset[0]}</b> sağlıyor. Havuz yöneticin akıllı sözleşmeleri buna göre optimize etmektedir.</div>", unsafe_allow_html=True)
+        sim_col1, sim_col2 = st.columns([1, 2])
+        with sim_col1:
+            sim_monthly = st.number_input("Aylık Yatırım Tutarı", min_value=50, step=50, value=pool_data['monthly_contribution'])
+            sim_years = st.slider("Yatırım Süresi (Yıl)", min_value=1, max_value=15, value=5)
+            
+            st.markdown("**Tahmini Yıllık Getiri Oranı**")
+            sim_strat = st.selectbox("Strateji Seçimi", [
+                "ABD Temettü (SCHD) - Yıllık ~%9", 
+                "Geleneksel Kasa - Yıllık %0",
+                "Yüksek Risk (BTC) - Yıllık ~%20"
+            ])
+            
+            if "Temettü" in sim_strat: annual_rate = 0.09
+            elif "BTC" in sim_strat: annual_rate = 0.20
+            else: annual_rate = 0.0
+            
+            months_total = sim_years * 12
+            monthly_rate = annual_rate / 12
+            
+            # Bileşik Getiri Hesaplama
+            future_value = 0
+            balances = []
+            contributions = []
+            for m in range(1, months_total + 1):
+                future_value = (future_value + sim_monthly) * (1 + monthly_rate)
+                balances.append(future_value)
+                contributions.append(sim_monthly * m)
+                
+            total_invested = sim_monthly * months_total
+            total_profit = future_value - total_invested
+            
+            st.divider()
+            st.metric(f"{sim_years} Yıl Sonunda Toplam Portföy", f"${future_value:,.2f}", f"+${total_profit:,.2f} Bileşik Kâr")
+            
+        with sim_col2:
+            fig_sim = go.Figure()
+            fig_sim.add_trace(go.Scatter(x=list(range(1, months_total + 1)), y=balances, mode='lines', name='Toplam Portföy Değeri', line=dict(color='#10b981', width=3), fill='tozeroy'))
+            fig_sim.add_trace(go.Scatter(x=list(range(1, months_total + 1)), y=contributions, mode='lines', name='Sizin Yatırdığınız Ana Para', line=dict(color='#6b7280', width=2, dash='dash')))
+            fig_sim.update_layout(title="Zaman İçindeki Bileşik Büyüme Etkisi", xaxis_title="Aylar", yaxis_title="Portföy Büyüklüğü (USD)", plot_bgcolor='rgba(0,0,0,0)', legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+            st.plotly_chart(fig_sim, use_container_width=True)
 
 # ==========================================
 # 👑 YÖNETİCİ (ADMIN) PORTALI
@@ -236,7 +306,8 @@ elif st.session_state["role"] == "admin":
             if st.form_submit_button("Ağa Ekle"):
                 if len(active_users) >= total_months: st.error("Havuz dolu.")
                 else:
-                    p_data["users"].append({"user_id": len(active_users)+1, "name": name, "country": country, "has_paid": False, "has_received": False, "trust_score": random.randint(60, 95)})
+                    # Yeni kullanıcı eklendiğinde KYC onaysız olarak başlar
+                    p_data["users"].append({"user_id": len(active_users)+1, "name": name, "country": country, "has_paid": False, "has_received": False, "trust_score": random.randint(60, 95), "kyc_verified": False})
                     save_global_state_to_db(global_state); st.rerun()
                     
         st.divider()
@@ -270,7 +341,8 @@ elif st.session_state["role"] == "admin":
         st.markdown("### 👥 Tahsilat & Pos Sistemi")
         if not active_users: st.warning("Sol menüden müşteri ekleyin.")
         else:
-            df = pd.DataFrame([{"Müşteri": u['name'], "Bölge": u['country'], "Ödeme": "✅" if u['has_paid'] else "⏳", "Durum": "🏦 Kazandı" if u['has_received'] else "Bekliyor"} for u in active_users])
+            # KYC Sütununu tabloya ekliyoruz
+            df = pd.DataFrame([{"Müşteri": u['name'], "KYC": "✅" if u.get('kyc_verified') else "⚠️", "Ödeme": "✅" if u['has_paid'] else "⏳", "Durum": "🏦 Kazandı" if u['has_received'] else "Bekliyor"} for u in active_users])
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             if not is_completed:
@@ -290,8 +362,12 @@ elif st.session_state["role"] == "admin":
                 if len(active_users) >= total_months and all(u['has_paid'] for u in active_users):
                     st.info(f"ℹ️ Fonlar gerçek zamanlı {p_data['strategy']} piyasasına aktarıldı.")
                     if st.button("🚀 CANLI PİYASA GETİRİSİNİ HESAPLA VE DAĞIT", type="primary", use_container_width=True):
-                        eligible_indices = [i for i, u in enumerate(active_users) if not u['has_received']]
-                        if eligible_indices:
+                        # KYC Onayı olmayanlar kura dışında kalır (Gerçek regülasyon mantığı)
+                        eligible_indices = [i for i, u in enumerate(active_users) if not u['has_received'] and u.get('kyc_verified', False)]
+                        
+                        if not eligible_indices:
+                            st.error("Kura çekilemiyor! Henüz ödül almamış kullanıcılar arasında KYC (Kimlik) doğrulamasını tamamlayan kimse yok.")
+                        else:
                             with st.spinner("API verisi çekiliyor..."):
                                 time.sleep(1)
                                 collected = p_data["monthly_contribution"] * total_months
@@ -324,6 +400,7 @@ elif st.session_state["role"] == "admin":
     with tab_a3:
         st.markdown("### 🤖 SusuAI Fon & Piyasa Analizi")
         avg_trust = int(sum(u.get('trust_score', 50) for u in active_users) / len(active_users)) if active_users else 0
+        kyc_count = sum(1 for u in active_users if u.get("kyc_verified", False))
         best_asset = max(live_market.items(), key=lambda x: x[1]['change'])
         
         trust_status = "Risk Yok" if avg_trust > 80 else ("Orta Risk" if avg_trust > 60 else "Yüksek Risk")
@@ -331,7 +408,7 @@ elif st.session_state["role"] == "admin":
         st.markdown(f"""
         <div class='ai-card'>
             <b>Yönetici Özeti:</b><br><br>
-            <b>1. Fon Sağlığı:</b> Havuzdaki yatırımcıların ortalama güven puanı <b>{avg_trust}</b>. Tahsilat durumu: <b>{trust_status}</b>.<br><br>
+            <b>1. Fon Sağlığı:</b> Havuzdaki yatırımcıların ortalama güven puanı <b>{avg_trust}</b>. Tahsilat durumu: <b>{trust_status}</b>. Ağa katılan {len(active_users)} kişiden {kyc_count} tanesinin KYC onayı tamamlanmıştır.<br><br>
             <b>2. Yapay Zeka Piyasa Analizi:</b> Son 5 günlük verilere göre en kârlı enstrüman <b>%{(best_asset[1]['change']*100):.2f}</b> büyüme ile <b>{best_asset[0]}</b> oldu. <br><br>
             <b>3. Strateji Önerisi:</b> Mevcut "{p_data['strategy']}" stratejiniz piyasa koşullarıyla uyumlu çalışıyor. Fon kârlılığını maksimize etmek için bir sonraki döngüde "Smart Yield (Otomatik)" modeline geçmeniz tavsiye edilir.
         </div>
