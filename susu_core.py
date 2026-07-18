@@ -19,8 +19,57 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { gap: 10px; border-bottom: 2px solid #e5e7eb; }
     .stTabs [data-baseweb="tab"] { font-weight: 600; color: #4b5563; }
     .stTabs [aria-selected="true"] { color: #16a34a !important; border-bottom: 3px solid #16a34a !important; }
+    
+    /* Login Ekranı İçin Özel Kart Tasarımı */
+    .login-box {
+        background-color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        border: 1px solid #e5e7eb;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ==========================================
+# 🔐 KİMLİK DOĞRULAMA (LOGIN) SİSTEMİ
+# ==========================================
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    # Sayfayı ortalamak için boşluklar
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🏦 Susu Global OS</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #6b7280; margin-bottom: 30px;'>Kurumsal Fon Yönetim Paneli</p>", unsafe_allow_html=True)
+        
+        with st.form("login_form"):
+            username = st.text_input("Yetkili ID (Kullanıcı Adı)")
+            password = st.text_input("Güvenlik Anahtarı (Şifre)", type="password")
+            submit_btn = st.form_submit_button("Sisteme Giriş Yap", type="primary", use_container_width=True)
+            
+            if submit_btn:
+                # Varsayılan Admin Bilgileri
+                if username == "admin" and password == "susu2026":
+                    st.session_state["authenticated"] = True
+                    st.success("✅ Kimlik doğrulandı. Yönlendiriliyorsunuz...")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Hatalı ID veya Güvenlik Anahtarı!")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Giriş yapılmadıysa uygulamanın geri kalanını okumayı durdur:
+    st.stop()
+
+# ==========================================
+# ⚙️ GİRİŞ YAPILDIKTAN SONRA ÇALIŞAN ANA SİSTEM
+# ==========================================
 
 # Supabase Ayarları
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
@@ -33,9 +82,6 @@ def get_clean_base_url():
     if "/rest/v1" in url: url = url.replace("/rest/v1", ""); url = url.rstrip("/")
     return url
 
-# ==========================================
-# 📡 CANLI PİYASA VERİSİ (YFINANCE API)
-# ==========================================
 @st.cache_data(ttl=300) 
 def get_live_market_data():
     rates = {"BTC": {"price": 0, "change": 0}, "GOLD": {"price": 0, "change": 0}, "ETF": {"price": 0, "change": 0}}
@@ -54,9 +100,6 @@ def get_live_market_data():
 
 live_market = get_live_market_data()
 
-# ==========================================
-# 🌍 VERİ TABANI & MODELLER
-# ==========================================
 def load_global_state_from_db():
     base_url = get_clean_base_url()
     if not base_url or not SUPABASE_KEY: return None
@@ -85,7 +128,6 @@ global_state = load_global_state_from_db()
 if not global_state: global_state = {"pools": {}}
 pools_dict = global_state["pools"]
 
-# Strateji yamasını güvenceye al
 for p_id in pools_dict:
     if "strategy" not in pools_dict[p_id]: pools_dict[p_id]["strategy"] = "🤖 Smart Yield (Otomatik)"
 
@@ -95,10 +137,15 @@ for p_id in pools_dict:
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=50)
     st.markdown("### Susu Global")
-    st.caption("WealthTech OS | v14.0 Multi-Pool")
+    st.caption("WealthTech OS | v15.0 Secure")
+    
+    # ÇIKIŞ YAP BUTONU
+    if st.button("🚪 Güvenli Çıkış (Logout)", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.rerun()
+        
     st.divider()
     
-    # 📂 Havuz Seçimi
     selected_pool_id = st.selectbox("📂 Aktif Portföy", options=list(pools_dict.keys()), format_func=lambda x: pools_dict[x]["pool_name"])
     p_data = pools_dict[selected_pool_id]
     active_users = [SusuUser(**u) for u in p_data["users"]]
@@ -118,7 +165,6 @@ with st.sidebar:
 
     st.divider()
     
-    # 👤 Kullanıcı Ekleme Modülü
     st.markdown("#### 👤 Yeni Müşteri Ekle")
     with st.form("onboard_form", clear_on_submit=True):
         name = st.text_input("Ad Soyad")
@@ -131,10 +177,9 @@ with st.sidebar:
                 
     st.divider()
     
-    # 🆕 YENİ EKLENEN: SIFIRDAN HAVUZ OLUŞTURMA
     st.markdown("#### ➕ Yeni Fon Havuzu Kur")
     with st.form("create_pool_form", clear_on_submit=True):
-        new_pool_name = st.text_input("Havuz Adı", placeholder="Örn: Midas US Portföyü")
+        new_pool_name = st.text_input("Havuz Adı", placeholder="Örn: Kurumsal Yatırım")
         new_pool_amount = st.number_input("Aylık Katılım (USD)", min_value=50, step=50, value=500)
         new_pool_months = st.number_input("Kapasite (Kişi Sayısı)", min_value=2, max_value=24, value=5)
         
@@ -159,7 +204,7 @@ with st.sidebar:
                 st.rerun()
 
 # ==========================================
-# 🌐 ÜST BAR: CANLI PİYASA TERMİNALİ
+# 🌐 ÜST BAR & YÖNETİM PANELİ
 # ==========================================
 t1, t2, t3, t4 = st.columns(4)
 with t1: 
@@ -175,9 +220,6 @@ with t4:
     st.metric("Aktif Strateji", p_data["strategy"].split(" ")[1], p_data["strategy"].split(" ")[0], delta_color="off")
 st.divider()
 
-# ==========================================
-# 📊 ANA YÖNETİM PANELİ (Dashboard)
-# ==========================================
 col_title, col_status = st.columns([3, 1])
 with col_title: st.markdown(f"<h2>{p_data['pool_name']}</h2>", unsafe_allow_html=True)
 with col_status:
@@ -204,7 +246,7 @@ with tab1:
             
             if not is_completed:
                 with st.container(border=True):
-                    pay_cols = st.columns(min(len(active_users), 6)) # Arayüz taşmasını engellemek için
+                    pay_cols = st.columns(min(len(active_users), 6))
                     for idx, u in enumerate(active_users):
                         with pay_cols[idx % 6]:
                             if u.has_paid: st.success(f"{u.name}")
@@ -212,7 +254,6 @@ with tab1:
                                 if st.button(f"Tahsil Et:\n{u.name}", key=f"pay_{p_data['pool_id']}_{u.user_id}", use_container_width=True):
                                     p_data["users"][idx]["has_paid"] = True; save_global_state_to_db(global_state); st.rerun()
 
-                # GERÇEK ZAMANLI DAĞITIM MOTORU
                 if len(active_users) >= total_months and all(u.has_paid for u in active_users):
                     st.info(f"ℹ️ Fonlar gerçek zamanlı {p_data['strategy']} piyasasına aktarıldı.")
                     if st.button("🚀 CANLI PİYASA GETİRİSİNİ HESAPLA VE DAĞIT", type="primary", use_container_width=True):
