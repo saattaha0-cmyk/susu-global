@@ -5,6 +5,7 @@ import requests
 import time
 import plotly.graph_objects as go
 import yfinance as yf
+from datetime import datetime
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Susu Global | Enterprise WealthTech", page_icon="🏦", layout="wide", initial_sidebar_state="expanded")
@@ -128,7 +129,7 @@ with t2: gold_color = "normal" if live_market['GOLD']['change'] >= 0 else "inver
 with t3: etf_color = "normal" if live_market['ETF']['change'] >= 0 else "inverse"; st.metric("US Temettü ETF", f"${live_market['ETF']['price']:,.2f}", f"{live_market['ETF']['change']*100:.2f}%", delta_color=etf_color)
 with t4: 
     if st.session_state["role"] == "client": st.metric("Bağlı Havuz", st.session_state["current_pool"]["pool_name"].replace("🏦 ", ""), delta_color="off")
-    else: st.metric("Sistem Durumu", "Online", "v17.0", delta_color="normal")
+    else: st.metric("Sistem Durumu", "Online", "v18.0", delta_color="normal")
 st.divider()
 
 # ==========================================
@@ -167,17 +168,48 @@ if st.session_state["role"] == "client":
         st.caption(f"Beklenen Minimum Tahsilat: ${expected}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("### 📊 Fon Genel Getiri Performansı")
-    if pool_data["history"]:
-        months = [f"Döngü {h['month']}" for h in pool_data["history"]]
-        yields = [h.get("yield", 0) for h in pool_data["history"]]
-        fig = go.Figure()
-        colors = ['#ef4444' if y < 0 else '#10b981' for y in yields]
-        fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors, name="Getiri"))
-        fig.update_layout(xaxis_title="Aylar", yaxis_title="Net Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Havuz henüz dağıtım yapmamış. Getiri grafikleri ilk dağıtımdan sonra burada görünecektir.")
+    st.divider()
+
+    col_doc, col_chart = st.columns([1, 2])
+    with col_doc:
+        st.markdown("### 📄 Belgelerim")
+        if user_data.get('has_paid'):
+            receipt_date = datetime.now().strftime("%d-%m-%Y %H:%M")
+            receipt_text = f"=========================================\n" \
+                           f"        SUSU GLOBAL WEALTHTECH\n" \
+                           f"          E-TAHSİLAT MAKBUZU\n" \
+                           f"=========================================\n" \
+                           f"Tarih: {receipt_date}\n" \
+                           f"Müşteri: {user_data['name']}\n" \
+                           f"Fon Adı: {pool_data['pool_name'].replace('🏦 ', '')}\n" \
+                           f"Döngü: {pool_data['current_month']}. Ay Katılımı\n" \
+                           f"Tahsil Edilen Tutar: ${pool_data['monthly_contribution']}\n\n" \
+                           f"İşlem Durumu: BAŞARILI (Akıllı Sözleşme Onaylı)\n" \
+                           f"=========================================\n" \
+                           f"Bu belge elektronik olarak Susu OS tarafından üretilmiştir."
+            
+            st.success("Bu ayki ödemeniz başarıyla alınmıştır.")
+            st.download_button("📥 E-Dekont İndir (.txt)", data=receipt_text, file_name=f"Susu_Dekont_{user_data['name'].replace(' ', '_')}.txt", use_container_width=True)
+        else:
+            st.info("ℹ️ Bu ayki ödemenizi henüz yapmadığınız için güncel dekontunuz oluşmamıştır.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### ⚖️ Yasal Uyarı")
+        with st.expander("Risk Sözleşmesini Görüntüle"):
+            st.warning("Kripto para (BTC) ve Temettü (ETF) piyasaları yüksek volatilite içerebilir. Seçilen yatırım stratejisine bağlı olarak fonlarda kısa süreli dalgalanmalar yaşanabilir. Susu Global algoritması kârı maksimize etmeyi hedefler ancak kesin kazanç garantisi sunmaz. Yatırımlarınız uluslararası piyasa koşullarına tabidir.")
+
+    with col_chart:
+        st.markdown("### 📊 Havuz Getiri Performansı")
+        if pool_data["history"]:
+            months = [f"Döngü {h['month']}" for h in pool_data["history"]]
+            yields = [h.get("yield", 0) for h in pool_data["history"]]
+            fig = go.Figure()
+            colors = ['#ef4444' if y < 0 else '#10b981' for y in yields]
+            fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors, name="Getiri"))
+            fig.update_layout(xaxis_title="Aylar", yaxis_title="Net Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=30, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Havuz henüz kura dağıtımı yapmamış. Getiri grafikleri ilk dağıtımdan sonra burada görünecektir.")
 
 # ==========================================
 # 👑 YÖNETİCİ (ADMIN) PORTALI
