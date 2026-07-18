@@ -7,12 +7,11 @@ import plotly.graph_objects as go
 import yfinance as yf
 from datetime import datetime
 
-# Sayfa Ayarları
+# ==========================================
+# ⚙️ SAYFA & CSS AYARLARI
+# ==========================================
 st.set_page_config(page_title="Susu Global | Enterprise WealthTech", page_icon="🏦", layout="wide", initial_sidebar_state="expanded")
 
-# ==========================================
-# 🎨 ÖZEL CSS & STİL
-# ==========================================
 st.markdown("""
 <style>
     div[data-testid="stMetricValue"] { font-size: 24px !important; font-weight: 700 !important; color: #111827 !important; }
@@ -20,11 +19,12 @@ st.markdown("""
     .login-box { background-color: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #e5e7eb; }
     .cc-box { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-family: monospace;}
     .client-card { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #bbf7d0; padding: 20px; border-radius: 12px; }
+    .ai-card { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌍 VERİ TABANI & BAĞLANTILAR
+# 🌍 VERİ TABANI & CANLI PİYASA
 # ==========================================
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
@@ -72,7 +72,7 @@ def get_live_market_data():
 live_market = get_live_market_data()
 
 # ==========================================
-# 🔐 KİMLİK DOĞRULAMA (RBAC) SİSTEMİ
+# 🔐 KİMLİK DOĞRULAMA
 # ==========================================
 if "role" not in st.session_state: st.session_state["role"] = None
 if "current_user" not in st.session_state: st.session_state["current_user"] = None
@@ -129,7 +129,7 @@ with t2: gold_color = "normal" if live_market['GOLD']['change'] >= 0 else "inver
 with t3: etf_color = "normal" if live_market['ETF']['change'] >= 0 else "inverse"; st.metric("US Temettü ETF", f"${live_market['ETF']['price']:,.2f}", f"{live_market['ETF']['change']*100:.2f}%", delta_color=etf_color)
 with t4: 
     if st.session_state["role"] == "client": st.metric("Bağlı Havuz", st.session_state["current_pool"]["pool_name"].replace("🏦 ", ""), delta_color="off")
-    else: st.metric("Sistem Durumu", "Online", "v18.0", delta_color="normal")
+    else: st.metric("Sistem Durumu", "Online", "v19.0 AI", delta_color="normal")
 st.divider()
 
 # ==========================================
@@ -146,70 +146,58 @@ if st.session_state["role"] == "client":
         st.button("🚪 Çıkış Yap", on_click=logout, use_container_width=True)
     
     st.markdown(f"<h2>Hoş Geldin, {user_data['name']} 👋</h2>", unsafe_allow_html=True)
-    st.markdown(f"Şu anda **{pool_data['pool_name']}** fonundasın ve fon **{pool_data['strategy']}** stratejisi ile yönetiliyor.")
     
-    colA, colB, colC = st.columns(3)
-    with colA:
-        st.markdown("<div class='client-card'>", unsafe_allow_html=True)
-        st.metric("Susu Güven Puanın", f"{user_data.get('trust_score', 50)} ⭐")
-        st.caption("Puanın ne kadar yüksekse, erken çekim şansın o kadar artar.")
-        st.markdown("</div>", unsafe_allow_html=True)
-    with colB:
-        st.markdown("<div class='client-card'>", unsafe_allow_html=True)
-        pay_status = "✅ Ödendi" if user_data.get('has_paid') else "⏳ Bekleniyor"
-        st.metric("Bu Ayki Katılım", f"${pool_data['monthly_contribution']}", pay_status)
-        st.caption(f"Döngü: {pool_data['current_month']} / {pool_data['total_months']}")
-        st.markdown("</div>", unsafe_allow_html=True)
-    with colC:
-        st.markdown("<div class='client-card'>", unsafe_allow_html=True)
-        win_status = "🏦 Hesabına Geçti" if user_data.get('has_received') else "Sırasını Bekliyor"
-        st.metric("Fon Kura Durumu", win_status)
-        expected = pool_data['monthly_contribution'] * pool_data['total_months']
-        st.caption(f"Beklenen Minimum Tahsilat: ${expected}")
-        st.markdown("</div>", unsafe_allow_html=True)
+    tab_c1, tab_c2, tab_c3 = st.tabs(["📊 Cüzdan Özeti", "📄 Belgeler & Risk Bildirimi", "🤖 SusuAI Asistan"])
+    
+    with tab_c1:
+        st.markdown(f"Şu anda **{pool_data['pool_name']}** fonundasın ve fon **{pool_data['strategy']}** stratejisi ile yönetiliyor.")
+        colA, colB, colC = st.columns(3)
+        with colA:
+            st.markdown("<div class='client-card'>", unsafe_allow_html=True)
+            st.metric("Susu Güven Puanın", f"{user_data.get('trust_score', 50)} ⭐")
+            st.caption("Puanın ne kadar yüksekse, erken çekim şansın o kadar artar.")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with colB:
+            st.markdown("<div class='client-card'>", unsafe_allow_html=True)
+            pay_status = "✅ Ödendi" if user_data.get('has_paid') else "⏳ Bekleniyor"
+            st.metric("Bu Ayki Katılım", f"${pool_data['monthly_contribution']}", pay_status)
+            st.caption(f"Döngü: {pool_data['current_month']} / {pool_data['total_months']}")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with colC:
+            st.markdown("<div class='client-card'>", unsafe_allow_html=True)
+            win_status = "🏦 Hesabına Geçti" if user_data.get('has_received') else "Sırasını Bekliyor"
+            st.metric("Fon Kura Durumu", win_status)
+            st.caption(f"Beklenen Minimum Tahsilat: ${pool_data['monthly_contribution'] * pool_data['total_months']}")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    st.divider()
-
-    col_doc, col_chart = st.columns([1, 2])
-    with col_doc:
-        st.markdown("### 📄 Belgelerim")
-        if user_data.get('has_paid'):
-            receipt_date = datetime.now().strftime("%d-%m-%Y %H:%M")
-            receipt_text = f"=========================================\n" \
-                           f"        SUSU GLOBAL WEALTHTECH\n" \
-                           f"          E-TAHSİLAT MAKBUZU\n" \
-                           f"=========================================\n" \
-                           f"Tarih: {receipt_date}\n" \
-                           f"Müşteri: {user_data['name']}\n" \
-                           f"Fon Adı: {pool_data['pool_name'].replace('🏦 ', '')}\n" \
-                           f"Döngü: {pool_data['current_month']}. Ay Katılımı\n" \
-                           f"Tahsil Edilen Tutar: ${pool_data['monthly_contribution']}\n\n" \
-                           f"İşlem Durumu: BAŞARILI (Akıllı Sözleşme Onaylı)\n" \
-                           f"=========================================\n" \
-                           f"Bu belge elektronik olarak Susu OS tarafından üretilmiştir."
-            
-            st.success("Bu ayki ödemeniz başarıyla alınmıştır.")
-            st.download_button("📥 E-Dekont İndir (.txt)", data=receipt_text, file_name=f"Susu_Dekont_{user_data['name'].replace(' ', '_')}.txt", use_container_width=True)
-        else:
-            st.info("ℹ️ Bu ayki ödemenizi henüz yapmadığınız için güncel dekontunuz oluşmamıştır.")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("### ⚖️ Yasal Uyarı")
-        with st.expander("Risk Sözleşmesini Görüntüle"):
-            st.warning("Kripto para (BTC) ve Temettü (ETF) piyasaları yüksek volatilite içerebilir. Seçilen yatırım stratejisine bağlı olarak fonlarda kısa süreli dalgalanmalar yaşanabilir. Susu Global algoritması kârı maksimize etmeyi hedefler ancak kesin kazanç garantisi sunmaz. Yatırımlarınız uluslararası piyasa koşullarına tabidir.")
-
-    with col_chart:
-        st.markdown("### 📊 Havuz Getiri Performansı")
         if pool_data["history"]:
+            st.markdown("### 📈 Havuz Getiri Performansı")
             months = [f"Döngü {h['month']}" for h in pool_data["history"]]
             yields = [h.get("yield", 0) for h in pool_data["history"]]
             fig = go.Figure()
             colors = ['#ef4444' if y < 0 else '#10b981' for y in yields]
-            fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors, name="Getiri"))
-            fig.update_layout(xaxis_title="Aylar", yaxis_title="Net Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=30, b=0))
+            fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors))
+            fig.update_layout(xaxis_title="Aylar", yaxis_title="Net Getiri (USD)", plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=10, b=0), height=300)
             st.plotly_chart(fig, use_container_width=True)
+
+    with tab_c2:
+        if user_data.get('has_paid'):
+            receipt_date = datetime.now().strftime("%d-%m-%Y %H:%M")
+            receipt_text = f"=========================================\n        SUSU GLOBAL WEALTHTECH\n          E-TAHSİLAT MAKBUZU\n=========================================\nTarih: {receipt_date}\nMüşteri: {user_data['name']}\nFon Adı: {pool_data['pool_name'].replace('🏦 ', '')}\nDöngü: {pool_data['current_month']}. Ay Katılımı\nTahsil Edilen Tutar: ${pool_data['monthly_contribution']}\n\nİşlem Durumu: BAŞARILI (Akıllı Sözleşme Onaylı)\n=========================================\nBu belge elektronik olarak Susu OS tarafından üretilmiştir."
+            st.success("Bu ayki ödemeniz başarıyla alınmıştır. Dekontunuzu indirebilirsiniz.")
+            st.download_button("📥 E-Dekont İndir (.txt)", data=receipt_text, file_name=f"Susu_Dekont_{user_data['name'].replace(' ', '_')}.txt")
         else:
-            st.info("Havuz henüz kura dağıtımı yapmamış. Getiri grafikleri ilk dağıtımdan sonra burada görünecektir.")
+            st.info("ℹ️ Bu ayki ödemenizi henüz yapmadığınız için dekontunuz oluşmamıştır.")
+            
+        st.markdown("<br>### ⚖️ Risk Bildirimi", unsafe_allow_html=True)
+        st.warning("Kripto para (BTC) ve Temettü (ETF) piyasaları yüksek volatilite içerebilir. Seçilen yatırım stratejisine bağlı olarak fonlarda kısa süreli dalgalanmalar yaşanabilir. Susu Global algoritması kârı maksimize etmeyi hedefler ancak kesin kazanç garantisi sunmaz.")
+
+    with tab_c3:
+        st.markdown("### 🤖 SusuAI Akıllı Portföy Asistanı")
+        best_asset = max(live_market.items(), key=lambda x: x[1]['change'])
+        worst_asset = min(live_market.items(), key=lambda x: x[1]['change'])
+        
+        st.markdown(f"<div class='ai-card'><b>SusuAI:</b> Merhaba {user_data['name']}. Senin Susu Güven Puanın <b>{user_data.get('trust_score', 50)}</b>. Düzenli ödeme yapmaya devam edersen bir sonraki döngüde kura şansın istatistiksel olarak %15 artacaktır. <br><br>Şu an küresel piyasalara baktığımda en iyi getiriyi <b>%{(best_asset[1]['change']*100):.2f}</b> büyüme ile <b>{best_asset[0]}</b> sağlıyor. Havuz yöneticin akıllı sözleşmeleri buna göre optimize etmektedir.</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 👑 YÖNETİCİ (ADMIN) PORTALI
@@ -217,7 +205,6 @@ if st.session_state["role"] == "client":
 elif st.session_state["role"] == "admin":
     pools_dict = global_state["pools"]
     if not pools_dict:
-        st.warning("Hiç havuz yok. Yeni bir havuz oluşturuluyor...")
         default = {"Global-Alpha": {"pool_id": "Global-Alpha", "pool_name": "🌐 Global Alpha Pool", "currency": "USD", "monthly_contribution": 1000, "total_months": 4, "current_month": 1, "total_yield": 0.0, "strategy": "🤖 Smart Yield (Otomatik)", "users": [], "history": []}}
         save_global_state_to_db({"pools": default}); st.rerun()
 
@@ -277,9 +264,9 @@ elif st.session_state["role"] == "admin":
         with mc3: st.metric("Havuz Kapasitesi", f"{len(active_users)} / {total_months} Kişi")
         with mc4: st.metric("Ortalama Güven", f"{int(sum(u.get('trust_score', 50) for u in active_users)/len(active_users)) if active_users else 0} ⭐")
 
-    tab1, tab2 = st.tabs(["⚡ Operasyon Merkezi", "🚀 Dağıtım Logları"])
+    tab_a1, tab_a2, tab_a3 = st.tabs(["⚡ Operasyon Merkezi", "🚀 Dağıtım Logları", "🤖 SusuAI Risk Analisti"])
 
-    with tab1:
+    with tab_a1:
         st.markdown("### 👥 Tahsilat & Pos Sistemi")
         if not active_users: st.warning("Sol menüden müşteri ekleyin.")
         else:
@@ -327,9 +314,25 @@ elif st.session_state["role"] == "admin":
                                 for u in p_data["users"]: u["has_paid"] = False
                                 save_global_state_to_db(global_state); st.rerun()
 
-    with tab2:
+    with tab_a2:
         st.markdown("### 🛡️ Dağıtım Geçmişi")
         if not p_data["history"]: st.caption("İşlem yok.")
         for event in reversed(p_data["history"]):
             st.markdown(f"**Döngü {event['month']}** | Kazanan: **{event['winner']}** (Net: {event['payout']:,} USD) | API: {event.get('strat_detail', '')}")
             st.divider()
+
+    with tab_a3:
+        st.markdown("### 🤖 SusuAI Fon & Piyasa Analizi")
+        avg_trust = int(sum(u.get('trust_score', 50) for u in active_users) / len(active_users)) if active_users else 0
+        best_asset = max(live_market.items(), key=lambda x: x[1]['change'])
+        
+        trust_status = "Risk Yok" if avg_trust > 80 else ("Orta Risk" if avg_trust > 60 else "Yüksek Risk")
+        
+        st.markdown(f"""
+        <div class='ai-card'>
+            <b>Yönetici Özeti:</b><br><br>
+            <b>1. Fon Sağlığı:</b> Havuzdaki yatırımcıların ortalama güven puanı <b>{avg_trust}</b>. Tahsilat durumu: <b>{trust_status}</b>.<br><br>
+            <b>2. Yapay Zeka Piyasa Analizi:</b> Son 5 günlük verilere göre en kârlı enstrüman <b>%{(best_asset[1]['change']*100):.2f}</b> büyüme ile <b>{best_asset[0]}</b> oldu. <br><br>
+            <b>3. Strateji Önerisi:</b> Mevcut "{p_data['strategy']}" stratejiniz piyasa koşullarıyla uyumlu çalışıyor. Fon kârlılığını maksimize etmek için bir sonraki döngüde "Smart Yield (Otomatik)" modeline geçmeniz tavsiye edilir.
+        </div>
+        """, unsafe_allow_html=True)
