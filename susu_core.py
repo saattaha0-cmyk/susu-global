@@ -36,22 +36,20 @@ def get_clean_base_url():
 # ==========================================
 # 📡 CANLI PİYASA VERİSİ (YFINANCE API)
 # ==========================================
-@st.cache_data(ttl=300) # Veriyi 5 dakikada bir çeker (API'yi yormamak için)
+@st.cache_data(ttl=300) 
 def get_live_market_data():
     rates = {"BTC": {"price": 0, "change": 0}, "GOLD": {"price": 0, "change": 0}, "ETF": {"price": 0, "change": 0}}
     try:
-        # BTC-USD (Kripto), GC=F (Altın Vadeli), SCHD (US Temettü ETF)
         assets = {"BTC-USD": "BTC", "GC=F": "GOLD", "SCHD": "ETF"}
         for symbol, name in assets.items():
             tk = yf.Ticker(symbol)
-            hist = tk.history(period="5d") # Son 5 günlük temel fiyat hareketi
+            hist = tk.history(period="5d")
             if len(hist) >= 2:
                 current = float(hist['Close'].iloc[-1])
                 prev = float(hist['Close'].iloc[0])
-                pct_change = (current - prev) / prev
-                rates[name] = {"price": current, "change": pct_change}
+                rates[name] = {"price": current, "change": (current - prev) / prev}
     except Exception as e:
-        pass # Hata olursa varsayılan sıfırlar kalır
+        pass
     return rates
 
 live_market = get_live_market_data()
@@ -97,9 +95,10 @@ for p_id in pools_dict:
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=50)
     st.markdown("### Susu Global")
-    st.caption("WealthTech OS | v13.0 Live API")
+    st.caption("WealthTech OS | v14.0 Multi-Pool")
     st.divider()
     
+    # 📂 Havuz Seçimi
     selected_pool_id = st.selectbox("📂 Aktif Portföy", options=list(pools_dict.keys()), format_func=lambda x: pools_dict[x]["pool_name"])
     p_data = pools_dict[selected_pool_id]
     active_users = [SusuUser(**u) for u in p_data["users"]]
@@ -118,15 +117,46 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.markdown("#### 👤 Yeni Müşteri Katılımı")
+    
+    # 👤 Kullanıcı Ekleme Modülü
+    st.markdown("#### 👤 Yeni Müşteri Ekle")
     with st.form("onboard_form", clear_on_submit=True):
         name = st.text_input("Ad Soyad")
         country = st.selectbox("Bağlı Bölge (Node)", ["TR-Istanbul", "US-NewYork", "UK-London", "DE-Berlin"])
-        if st.form_submit_button("Doğrula ve Ağa Ekle"):
-            if len(active_users) >= total_months: st.error("Maksimum kapasiteye ulaşıldı.")
+        if st.form_submit_button("Ağa Ekle"):
+            if len(active_users) >= total_months: st.error("Havuz dolu.")
             else:
                 p_data["users"].append(SusuUser(len(active_users) + 1, name, country, trust_score=random.randint(60, 95)).to_dict())
                 save_global_state_to_db(global_state); st.rerun()
+                
+    st.divider()
+    
+    # 🆕 YENİ EKLENEN: SIFIRDAN HAVUZ OLUŞTURMA
+    st.markdown("#### ➕ Yeni Fon Havuzu Kur")
+    with st.form("create_pool_form", clear_on_submit=True):
+        new_pool_name = st.text_input("Havuz Adı", placeholder="Örn: Midas US Portföyü")
+        new_pool_amount = st.number_input("Aylık Katılım (USD)", min_value=50, step=50, value=500)
+        new_pool_months = st.number_input("Kapasite (Kişi Sayısı)", min_value=2, max_value=24, value=5)
+        
+        if st.form_submit_button("Yeni Havuzu Başlat"):
+            if new_pool_name:
+                new_id = f"{new_pool_name.replace(' ', '-')}-{random.randint(1000,9999)}"
+                pools_dict[new_id] = {
+                    "pool_id": new_id,
+                    "pool_name": f"🏦 {new_pool_name}",
+                    "currency": "USD",
+                    "monthly_contribution": new_pool_amount,
+                    "total_months": new_pool_months,
+                    "current_month": 1,
+                    "total_yield": 0.0,
+                    "strategy": "🤖 Smart Yield (Otomatik)",
+                    "users": [],
+                    "history": []
+                }
+                save_global_state_to_db(global_state)
+                st.success(f"{new_pool_name} oluşturuldu!")
+                time.sleep(1)
+                st.rerun()
 
 # ==========================================
 # 🌐 ÜST BAR: CANLI PİYASA TERMİNALİ
@@ -149,7 +179,7 @@ st.divider()
 # 📊 ANA YÖNETİM PANELİ (Dashboard)
 # ==========================================
 col_title, col_status = st.columns([3, 1])
-with col_title: st.markdown(f"<h2>🏦 {p_data['pool_name']}</h2>", unsafe_allow_html=True)
+with col_title: st.markdown(f"<h2>{p_data['pool_name']}</h2>", unsafe_allow_html=True)
 with col_status:
     if is_completed: st.success("✅ Döngü Tamamlandı")
     else: st.info(f"⏳ Döngü {current_month} / {total_months}")
@@ -167,19 +197,19 @@ with tab1:
     col_left, col_right = st.columns([6, 4])
     with col_left:
         st.markdown("### 👥 Tahsilat & Dağıtım Motoru")
-        if not active_users: st.warning("Havuz boş. Sol menüden müşteri ekleyin.")
+        if not active_users: st.warning("Bu havuz şu an boş. Sol menüden ağa müşteri ekleyin.")
         else:
             df = pd.DataFrame([{"Müşteri": u.name, "Bölge": u.country, "Ödeme": "✅" if u.has_paid else "⏳", "Durum": "🏦 Kazandı" if u.has_received else "Bekliyor"} for u in active_users])
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             if not is_completed:
                 with st.container(border=True):
-                    pay_cols = st.columns(len(active_users))
+                    pay_cols = st.columns(min(len(active_users), 6)) # Arayüz taşmasını engellemek için
                     for idx, u in enumerate(active_users):
-                        with pay_cols[idx]:
+                        with pay_cols[idx % 6]:
                             if u.has_paid: st.success(f"{u.name}")
                             else:
-                                if st.button(f"Tahsil Et:\n{u.name}", key=f"pay_{u.user_id}", use_container_width=True):
+                                if st.button(f"Tahsil Et:\n{u.name}", key=f"pay_{p_data['pool_id']}_{u.user_id}", use_container_width=True):
                                     p_data["users"][idx]["has_paid"] = True; save_global_state_to_db(global_state); st.rerun()
 
                 # GERÇEK ZAMANLI DAĞITIM MOTORU
@@ -192,7 +222,6 @@ with tab1:
                                 time.sleep(1.5)
                                 collected = p_data["monthly_contribution"] * total_months
                                 
-                                # Canlı API'den gelen verileri kullan
                                 rate_gold = live_market['GOLD']['change']
                                 rate_etf = live_market['ETF']['change']
                                 rate_btc = live_market['BTC']['change']
@@ -204,7 +233,7 @@ with tab1:
                                     final_rate = rate_etf; detail = f"SCHD Canlı ETF Verisi (%{final_rate*100:.2f})"
                                 elif "Yüksek Risk" in strat: 
                                     final_rate = rate_btc; detail = f"BTC/USD Canlı Verisi (%{final_rate*100:.2f})"
-                                else: # Smart Yield (En Yüksek Getiriyi Bulan Algoritma)
+                                else:
                                     best_asset, final_rate = max([("Altın", rate_gold), ("US ETF", rate_etf), ("Bitcoin", rate_btc)], key=lambda x: x[1])
                                     detail = f"Smart Optimizasyon: {best_asset} Seçildi (%{final_rate*100:.2f})"
 
@@ -215,7 +244,7 @@ with tab1:
                                 p_data["users"][winner_idx]["has_received"] = True
                                 p_data["users"][winner_idx]["trust_score"] = min(100, p_data["users"][winner_idx]["trust_score"] + 5)
                                 
-                                payout = collected * 0.99 # %1 platform kesintisi
+                                payout = collected * 0.99 
                                 p_data["history"].append({"month": current_month, "winner": active_users[winner_idx].name, "payout": payout, "yield": generated_yield, "strat_detail": detail})
                                 p_data["current_month"] += 1
                                 for u in p_data["users"]: u["has_paid"] = False
