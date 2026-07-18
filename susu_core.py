@@ -20,58 +20,36 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { font-weight: 600; color: #4b5563; }
     .stTabs [aria-selected="true"] { color: #16a34a !important; border-bottom: 3px solid #16a34a !important; }
     
-    /* Login Ekranı İçin Özel Kart Tasarımı */
-    .login-box {
-        background-color: white;
-        padding: 2rem;
-        border-radius: 12px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-        border: 1px solid #e5e7eb;
-    }
+    .login-box { background-color: white; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; }
+    .cc-box { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-family: monospace;}
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
 # 🔐 KİMLİK DOĞRULAMA (LOGIN) SİSTEMİ
 # ==========================================
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
+if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    # Sayfayı ortalamak için boşluklar
     st.markdown("<br><br><br>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("<div class='login-box'>", unsafe_allow_html=True)
         st.markdown("<h2 style='text-align: center;'>🏦 Susu Global OS</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #6b7280; margin-bottom: 30px;'>Kurumsal Fon Yönetim Paneli</p>", unsafe_allow_html=True)
-        
         with st.form("login_form"):
-            username = st.text_input("Yetkili ID (Kullanıcı Adı)")
-            password = st.text_input("Güvenlik Anahtarı (Şifre)", type="password")
-            submit_btn = st.form_submit_button("Sisteme Giriş Yap", type="primary", use_container_width=True)
-            
-            if submit_btn:
-                # Varsayılan Admin Bilgileri
+            username = st.text_input("Yetkili ID")
+            password = st.text_input("Güvenlik Anahtarı", type="password")
+            if st.form_submit_button("Sisteme Giriş Yap", type="primary", use_container_width=True):
                 if username == "admin" and password == "susu2026":
-                    st.session_state["authenticated"] = True
-                    st.success("✅ Kimlik doğrulandı. Yönlendiriliyorsunuz...")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("❌ Hatalı ID veya Güvenlik Anahtarı!")
-        
+                    st.session_state["authenticated"] = True; st.success("✅ Yönlendiriliyorsunuz..."); time.sleep(1); st.rerun()
+                else: st.error("❌ Hatalı ID veya Güvenlik Anahtarı!")
         st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Giriş yapılmadıysa uygulamanın geri kalanını okumayı durdur:
     st.stop()
 
 # ==========================================
-# ⚙️ GİRİŞ YAPILDIKTAN SONRA ÇALIŞAN ANA SİSTEM
+# ⚙️ ANA SİSTEM BAŞLANGICI
 # ==========================================
-
-# Supabase Ayarları
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
@@ -94,8 +72,7 @@ def get_live_market_data():
                 current = float(hist['Close'].iloc[-1])
                 prev = float(hist['Close'].iloc[0])
                 rates[name] = {"price": current, "change": (current - prev) / prev}
-    except Exception as e:
-        pass
+    except: pass
     return rates
 
 live_market = get_live_market_data()
@@ -137,15 +114,12 @@ for p_id in pools_dict:
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2953/2953363.png", width=50)
     st.markdown("### Susu Global")
-    st.caption("WealthTech OS | v15.0 Secure")
+    st.caption("WealthTech OS | v16.0 Stripe POS")
     
-    # ÇIKIŞ YAP BUTONU
     if st.button("🚪 Güvenli Çıkış (Logout)", use_container_width=True):
-        st.session_state["authenticated"] = False
-        st.rerun()
+        st.session_state["authenticated"] = False; st.rerun()
         
     st.divider()
-    
     selected_pool_id = st.selectbox("📂 Aktif Portföy", options=list(pools_dict.keys()), format_func=lambda x: pools_dict[x]["pool_name"])
     p_data = pools_dict[selected_pool_id]
     active_users = [SusuUser(**u) for u in p_data["users"]]
@@ -159,16 +133,13 @@ with st.sidebar:
     selected_strategy = st.selectbox("Emanet Kasa Yönetimi", strategies, index=current_strat_idx)
     
     if selected_strategy != p_data["strategy"]:
-        p_data["strategy"] = selected_strategy
-        save_global_state_to_db(global_state)
-        st.rerun()
+        p_data["strategy"] = selected_strategy; save_global_state_to_db(global_state); st.rerun()
 
     st.divider()
-    
     st.markdown("#### 👤 Yeni Müşteri Ekle")
     with st.form("onboard_form", clear_on_submit=True):
         name = st.text_input("Ad Soyad")
-        country = st.selectbox("Bağlı Bölge (Node)", ["TR-Istanbul", "US-NewYork", "UK-London", "DE-Berlin"])
+        country = st.selectbox("Bağlı Bölge", ["TR-Istanbul", "US-NewYork", "UK-London", "DE-Berlin"])
         if st.form_submit_button("Ağa Ekle"):
             if len(active_users) >= total_months: st.error("Havuz dolu.")
             else:
@@ -176,48 +147,25 @@ with st.sidebar:
                 save_global_state_to_db(global_state); st.rerun()
                 
     st.divider()
-    
     st.markdown("#### ➕ Yeni Fon Havuzu Kur")
     with st.form("create_pool_form", clear_on_submit=True):
         new_pool_name = st.text_input("Havuz Adı", placeholder="Örn: Kurumsal Yatırım")
-        new_pool_amount = st.number_input("Aylık Katılım (USD)", min_value=50, step=50, value=500)
-        new_pool_months = st.number_input("Kapasite (Kişi Sayısı)", min_value=2, max_value=24, value=5)
-        
+        new_pool_amount = st.number_input("Aylık (USD)", min_value=50, step=50, value=500)
+        new_pool_months = st.number_input("Kapasite", min_value=2, max_value=24, value=5)
         if st.form_submit_button("Yeni Havuzu Başlat"):
             if new_pool_name:
                 new_id = f"{new_pool_name.replace(' ', '-')}-{random.randint(1000,9999)}"
-                pools_dict[new_id] = {
-                    "pool_id": new_id,
-                    "pool_name": f"🏦 {new_pool_name}",
-                    "currency": "USD",
-                    "monthly_contribution": new_pool_amount,
-                    "total_months": new_pool_months,
-                    "current_month": 1,
-                    "total_yield": 0.0,
-                    "strategy": "🤖 Smart Yield (Otomatik)",
-                    "users": [],
-                    "history": []
-                }
-                save_global_state_to_db(global_state)
-                st.success(f"{new_pool_name} oluşturuldu!")
-                time.sleep(1)
-                st.rerun()
+                pools_dict[new_id] = {"pool_id": new_id, "pool_name": f"🏦 {new_pool_name}", "currency": "USD", "monthly_contribution": new_pool_amount, "total_months": new_pool_months, "current_month": 1, "total_yield": 0.0, "strategy": "🤖 Smart Yield (Otomatik)", "users": [], "history": []}
+                save_global_state_to_db(global_state); st.success(f"{new_pool_name} oluşturuldu!"); time.sleep(1); st.rerun()
 
 # ==========================================
 # 🌐 ÜST BAR & YÖNETİM PANELİ
 # ==========================================
 t1, t2, t3, t4 = st.columns(4)
-with t1: 
-    btc_color = "normal" if live_market['BTC']['change'] >= 0 else "inverse"
-    st.metric("BTC/USD", f"${live_market['BTC']['price']:,.2f}", f"{live_market['BTC']['change']*100:.2f}%", delta_color=btc_color)
-with t2: 
-    gold_color = "normal" if live_market['GOLD']['change'] >= 0 else "inverse"
-    st.metric("XAU/USD (Altın)", f"${live_market['GOLD']['price']:,.2f}", f"{live_market['GOLD']['change']*100:.2f}%", delta_color=gold_color)
-with t3: 
-    etf_color = "normal" if live_market['ETF']['change'] >= 0 else "inverse"
-    st.metric("US Dividend ETF (SCHD)", f"${live_market['ETF']['price']:,.2f}", f"{live_market['ETF']['change']*100:.2f}%", delta_color=etf_color)
-with t4: 
-    st.metric("Aktif Strateji", p_data["strategy"].split(" ")[1], p_data["strategy"].split(" ")[0], delta_color="off")
+with t1: btc_color = "normal" if live_market['BTC']['change'] >= 0 else "inverse"; st.metric("BTC/USD", f"${live_market['BTC']['price']:,.2f}", f"{live_market['BTC']['change']*100:.2f}%", delta_color=btc_color)
+with t2: gold_color = "normal" if live_market['GOLD']['change'] >= 0 else "inverse"; st.metric("XAU/USD (Altın)", f"${live_market['GOLD']['price']:,.2f}", f"{live_market['GOLD']['change']*100:.2f}%", delta_color=gold_color)
+with t3: etf_color = "normal" if live_market['ETF']['change'] >= 0 else "inverse"; st.metric("US Dividend ETF (SCHD)", f"${live_market['ETF']['price']:,.2f}", f"{live_market['ETF']['change']*100:.2f}%", delta_color=etf_color)
+with t4: st.metric("Aktif Strateji", p_data["strategy"].split(" ")[1], p_data["strategy"].split(" ")[0], delta_color="off")
 st.divider()
 
 col_title, col_status = st.columns([3, 1])
@@ -249,10 +197,27 @@ with tab1:
                     pay_cols = st.columns(min(len(active_users), 6))
                     for idx, u in enumerate(active_users):
                         with pay_cols[idx % 6]:
-                            if u.has_paid: st.success(f"{u.name}")
+                            if u.has_paid: 
+                                st.success(f"{u.name}")
                             else:
-                                if st.button(f"Tahsil Et:\n{u.name}", key=f"pay_{p_data['pool_id']}_{u.user_id}", use_container_width=True):
-                                    p_data["users"][idx]["has_paid"] = True; save_global_state_to_db(global_state); st.rerun()
+                                # YENİ NESİL SANAL POS ENTEGRASYONU (Popover)
+                                with st.popover(f"💳 Ödeme: {u.name[:8]}", use_container_width=True):
+                                    st.markdown(f"**{u.name}** - Tahsilat Terminali")
+                                    st.markdown(f"<div class='cc-box'>Susu Global Card<br><br>**** **** **** 4092<br>Tutar: ${p_data['monthly_contribution']}</div>", unsafe_allow_html=True)
+                                    
+                                    with st.form(f"pos_{p_data['pool_id']}_{u.user_id}"):
+                                        st.text_input("Kart Sahibi", value=u.name)
+                                        st.text_input("Kart Numarası", value="4542 1123 9087 4092", max_chars=19)
+                                        c1, c2 = st.columns(2)
+                                        c1.text_input("SKT", value="12/28", max_chars=5)
+                                        c2.text_input("CVC", value="***", type="password", max_chars=3)
+                                        
+                                        if st.form_submit_button("🔒 Stripe ile Çekim Yap", type="primary", use_container_width=True):
+                                            with st.spinner("Bankayla iletişim kuruluyor..."):
+                                                time.sleep(1.5)
+                                            p_data["users"][idx]["has_paid"] = True
+                                            save_global_state_to_db(global_state)
+                                            st.rerun()
 
                 if len(active_users) >= total_months and all(u.has_paid for u in active_users):
                     st.info(f"ℹ️ Fonlar gerçek zamanlı {p_data['strategy']} piyasasına aktarıldı.")
@@ -262,34 +227,24 @@ with tab1:
                             with st.spinner("Borsalardan anlık API verisi çekiliyor..."):
                                 time.sleep(1.5)
                                 collected = p_data["monthly_contribution"] * total_months
-                                
-                                rate_gold = live_market['GOLD']['change']
-                                rate_etf = live_market['ETF']['change']
-                                rate_btc = live_market['BTC']['change']
-                                
+                                rate_gold = live_market['GOLD']['change']; rate_etf = live_market['ETF']['change']; rate_btc = live_market['BTC']['change']
                                 strat = p_data["strategy"]
-                                if "Katılım" in strat: 
-                                    final_rate = rate_gold; detail = f"XAU Canlı Verisi (%{final_rate*100:.2f})"
-                                elif "Geleneksel" in strat: 
-                                    final_rate = rate_etf; detail = f"SCHD Canlı ETF Verisi (%{final_rate*100:.2f})"
-                                elif "Yüksek Risk" in strat: 
-                                    final_rate = rate_btc; detail = f"BTC/USD Canlı Verisi (%{final_rate*100:.2f})"
+                                if "Katılım" in strat: final_rate = rate_gold; detail = f"XAU Canlı Verisi (%{final_rate*100:.2f})"
+                                elif "Geleneksel" in strat: final_rate = rate_etf; detail = f"SCHD Canlı ETF Verisi (%{final_rate*100:.2f})"
+                                elif "Yüksek Risk" in strat: final_rate = rate_btc; detail = f"BTC/USD Canlı Verisi (%{final_rate*100:.2f})"
                                 else:
                                     best_asset, final_rate = max([("Altın", rate_gold), ("US ETF", rate_etf), ("Bitcoin", rate_btc)], key=lambda x: x[1])
                                     detail = f"Smart Optimizasyon: {best_asset} Seçildi (%{final_rate*100:.2f})"
 
                                 generated_yield = collected * final_rate
                                 p_data["total_yield"] = p_data.get("total_yield", 0) + generated_yield
-                                
                                 winner_idx = random.choice(eligible_indices)
                                 p_data["users"][winner_idx]["has_received"] = True
                                 p_data["users"][winner_idx]["trust_score"] = min(100, p_data["users"][winner_idx]["trust_score"] + 5)
-                                
                                 payout = collected * 0.99 
                                 p_data["history"].append({"month": current_month, "winner": active_users[winner_idx].name, "payout": payout, "yield": generated_yield, "strat_detail": detail})
                                 p_data["current_month"] += 1
                                 for u in p_data["users"]: u["has_paid"] = False
-                                
                                 save_global_state_to_db(global_state); st.rerun()
 
     with col_right:
@@ -308,7 +263,6 @@ with tab2:
     if p_data["history"]:
         months = [f"Döngü {h['month']}" for h in p_data["history"]]
         yields = [h.get("yield", 0) for h in p_data["history"]]
-        
         fig = go.Figure()
         colors = ['#ef4444' if y < 0 else '#10b981' for y in yields]
         fig.add_trace(go.Bar(x=months, y=yields, marker_color=colors, name="Döngüsel API Getiri/Zararı"))
